@@ -66,9 +66,13 @@ calc_mean_MCIB <- function(data_pnad, groups = NULL){
                         probDensity_closedBrackets = (m_i*y + c_i)/N
 
                         f_pareto_lastBracket = function(y){
-                                beta_pareto = lower_i[n_brackets]
-                                log_PDF = log(alpha_pareto) + alpha_pareto*log(beta_pareto) - (alpha_pareto+1)*log(y)
-                                exp(log_PDF)
+                                if(!is.na(alpha_pareto)){
+                                        beta_pareto = lower_i[n_brackets]
+                                        log_PDF = log(alpha_pareto) + alpha_pareto*log(beta_pareto) - (alpha_pareto+1)*log(y)
+                                        exp(log_PDF)
+                                }else{
+                                        0
+                                }
                         }
 
                         probDensity_openBracket = (n_i[n_brackets]/N)*f_pareto_lastBracket(y)
@@ -79,9 +83,16 @@ calc_mean_MCIB <- function(data_pnad, groups = NULL){
 
                         probDensity = ifelse(y < lower_i[1], 0, probDensity)
 
+                        if(is.na(alpha_pareto)){
+                                probDensity[y > last(lower_i)] <- 0
+                        }
+
                         probDensity
                 }
 
+                if(is.na(alpha_pareto)){
+                        pareto_upper_bound = last(lower_i)
+                }
 
                 mean = pracma::integral(function(x) x*pdf_MCIB(x),
                                         xmin = first(lower_i),

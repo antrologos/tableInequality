@@ -1,6 +1,6 @@
 #' @export
 
-calc_quantile_MCIB <- function(p, data_pnad, groups = NULL){
+calc_quantile_MCIB <- function(p, data_pnad, groups = NULL, known_groupMeans = NULL){
 
         if(is.null(groups)){
                 data_pnad <- data_pnad %>%
@@ -16,6 +16,11 @@ calc_quantile_MCIB <- function(p, data_pnad, groups = NULL){
                         ungroup() %>%
                         arrange(ID, min_faixa)
         }
+
+        known_groupMeans <- check_known_groupMeans_DF(data_pnad = data_pnad,
+                                                      groups = groups,
+                                                      known_groupMeans = known_groupMeans)
+
 
         data_split <- split(data_pnad, f = data_pnad$ID)
 
@@ -33,23 +38,52 @@ calc_quantile_MCIB <- function(p, data_pnad, groups = NULL){
                 lower_i = rowMeans(cbind(lower_i,c(NA, upper_i[-length(upper_i)])),na.rm = T)
                 upper_i = c(lower_i[-1], NA)
 
-                slope_intercept <- estimate_slope_and_intercept_MCIB(lower_i = lower_i,
-                                                                     upper_i = upper_i,
-                                                                     n_i = n_i)
-
+                slope_intercept <-estimate_slope_and_intercept_MCIB(lower_i = lower_i,
+                                                                    upper_i = upper_i,
+                                                                    n_i = n_i)
                 m = slope_intercept$m
                 c = slope_intercept$c
 
-                alpha_pareto <- getMids(ID = ID,
-                                        hb = n_i,
-                                        lb = lower_i,
-                                        ub = upper_i,
-                                        alpha_bound = 2)$alpha
-
                 beta_pareto = last(data_i$min_faixa)
+                if(!is.null(known_groupMeans)){
+
+                        knownMean_i = known_groupMeans %>%
+                                filter(ID == ID_i) %>%
+                                .$mean
+
+                        group_means_by_integral = {
+                                ((m/(3*n_i))*(upper_i^3) + (c/(2*n_i))*(upper_i^2)) - ((m/(3*n_i))*(lower_i^3) + (c/(2*n_i))*(lower_i^2))
+                        }
+
+                        mean_last_group = (1/last(n_i))*(N*knownMean_i - sum(n_i*group_means_by_integral, na.rm = T))
+
+
+                        if(mean_last_group > beta_pareto){
+                                alpha_pareto = mean_last_group/(mean_last_group - beta_pareto)
+                        }else{
+                                alpha_pareto <- getMids(ID = ID_i,
+                                                        hb = n_i,
+                                                        lb = lower_i,
+                                                        ub = upper_i,
+                                                        alpha_bound = 2)$alpha
+                        }
+
+                }else{
+                        alpha_pareto <- getMids(ID = ID_i,
+                                                hb = n_i,
+                                                lb = lower_i,
+                                                ub = upper_i,
+                                                alpha_bound = 2)$alpha
+
+                }
+
                 pareto_upper_bound = exp( log(beta_pareto) - log(1 - 0.995)/alpha_pareto)
 
-                estimated_quantile_function = function(p){
+                if(is.na(pareto_upper_bound)){
+                        pareto_upper_bound = Inf
+                }
+
+                function(p){
 
                         N = sum(n_i)
 
@@ -104,6 +138,10 @@ calc_quantile_MCIB <- function(p, data_pnad, groups = NULL){
                                           quantile_openBracket)
 
                         quantile = ifelse(p < 0 | p > 1, NA, quantile)
+
+                        if(is.na(alpha_pareto)){
+                                quantile[p==1] <- last(lower_i)
+                        }
 
                         quantile
                 }

@@ -181,8 +181,8 @@ estimate_slope_and_intercept_MCIB = function(lower_i = lower_i, upper_i = upper_
                 probDensity = ifelse(y < lower_i[1], 0, probDensity)
 
                 probDensity_test = NA
-                probDensity_test[probDensity< 0]   <- -1
-                probDensity_test[probDensity >= 0] <- 1
+                probDensity_test[probDensity <  0] <- -1
+                probDensity_test[probDensity >= 0] <-  1
 
                 slope_test = tibble(probDensity_test, i) %>%
                         group_by(i) %>%
@@ -253,7 +253,7 @@ estimate_slope_and_intercept_MCIB = function(lower_i = lower_i, upper_i = upper_
                 up = upper_i[m_order]
                 lw = lower_i[m_order]
 
-                infinitesimal = .Machine$double.eps^0.8
+                infinitesimal = .Machine$double.eps^0.75
 
                 new_m = (infinitesimal -n/(up - lw))/(y - ((up + lw)/2))
                 new_m
@@ -272,10 +272,29 @@ estimate_slope_and_intercept_MCIB = function(lower_i = lower_i, upper_i = upper_
                 }
         }
 
-        test_stillProducesNegative = any(!(pdf_MCIB_slopeTest(m_corrected)>0))
+        new_test <- pdf_MCIB_slopeTest(m_corrected)>0
+        new_test <- new_test[-which(is.na(upper_i))]
+        test_stillProducesNegative = any(!(new_test))
+
+        #if(test_stillProducesNegative == T){
+        #        stop("The slopes could could not be constrained to produce only positive probability densities")
+        #}
 
         if(test_stillProducesNegative == T){
-                stop("The slopes could could not be constrained to produce only positive probability densities")
+                m_generate_positive = pdf_MCIB_slopeTest(m_corrected) > 0
+                problematic_m <- which(!m_generate_positive)
+
+                if(length(problematic_m) >0 ){
+                        for(k in 1:length(problematic_m)){
+                                m_order = problematic_m[k]
+                                m_particular = m_corrected[m_order]
+                                m_corrected[m_order] = pdf_MCIB_correctSlope(m_particular = m_particular, m_order = m_order)
+                        }
+                }
+        }
+
+        if(test_stillProducesNegative == T){
+                message("The slopes could could not be constrained to produce only positive probability densities")
         }
 
         # re-estimating the intercepts
@@ -286,3 +305,54 @@ estimate_slope_and_intercept_MCIB = function(lower_i = lower_i, upper_i = upper_
 }
 
 
+
+check_known_groupMeans_DF <- function(data_pnad, groups = NULL, known_groupMeans = NULL){
+
+        if(!is.null(known_groupMeans)){
+
+                checkMeansDF <- is.data.frame(known_groupMeans)
+                if(checkMeansDF == FALSE){
+                        stop("'known_groupMeans' is not a data.frame")
+                }
+
+
+                if(!is.null(groups)){
+                        checkIDvars <- all(groups %in% names(known_groupMeans))
+                        if(checkIDvars == FALSE){
+                                stop("Groups variables are not contained in 'known_groupMeans'")
+                        }
+
+                        known_groupMeans <- known_groupMeans %>%
+                                unite(col = ID, groups)
+
+                        checkUniqueIDs = length(known_groupMeans$ID) == length(unique(known_groupMeans$ID))
+                        if(checkUniqueIDs == FALSE){
+                                stop("Group IDs defined by the group variables are not unique id the 'known_groupMeans' data.frame")
+                        }
+
+                }else{
+                        known_groupMeans$ID = 1
+                }
+
+                testDataID = all(unique(data_pnad$ID) %in% known_groupMeans$ID)
+                if(testDataID == FALSE){
+                        stop("There are groups listed in the data, but not in the 'known_groupMeans' data.frame")
+                }
+
+                testMeanID = all(known_groupMeans$ID %in% unique(data_pnad$ID))
+                if(testMeanID == FALSE){
+                        stop("There are groups listed in the 'known_groupMeans' data.frame, but not in the data")
+                }
+
+                checkMeanVar <-"mean" %in% names(known_groupMeans)
+                if(checkMeanVar == FALSE){
+                        stop("'known_groupMeans' must have a column named 'mean', which contains the group means")
+                }
+
+                return(known_groupMeans)
+
+        }else{
+                NULL
+
+        }
+}

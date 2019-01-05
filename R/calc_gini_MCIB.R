@@ -1,6 +1,6 @@
 #' @export
 
-calc_gini_MCIB <- function(data_pnad, groups = NULL){
+calc_gini_MCIB <- function(data_pnad, groups = NULL, known_groupMeans = NULL){
 
         if(is.null(groups)){
                 data_pnad <- data_pnad %>%
@@ -17,13 +17,17 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL){
                         arrange(ID, min_faixa)
         }
 
+        known_groupMeans <- check_known_groupMeans_DF(data_pnad = data_pnad,
+                                                      groups = groups,
+                                                      known_groupMeans = known_groupMeans)
+
         data_split <- split(data_pnad, f = data_pnad$ID)
 
         #data_i = data_split[[1]]
 
         gini_MCIB = function(data_i){
 
-                ID = data_i$ID %>% unique()
+                ID_i = data_i$ID %>% unique()
                 lower_i = data_i$min_faixa
                 upper_i = data_i$max_faixa
                 n_i     = data_i$n
@@ -33,24 +37,51 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL){
                 lower_i = rowMeans(cbind(lower_i,c(NA, upper_i[-length(upper_i)])),na.rm = T)
                 upper_i = c(lower_i[-1], NA)
 
-                slope_intercept <- tableInequality:::estimate_slope_and_intercept_MCIB(lower_i = lower_i,
-                                                                     upper_i = upper_i,
-                                                                     n_i = n_i)
-
+                slope_intercept <-estimate_slope_and_intercept_MCIB(lower_i = lower_i,
+                                                                    upper_i = upper_i,
+                                                                    n_i = n_i)
                 m = slope_intercept$m
                 c = slope_intercept$c
 
-
-                alpha_pareto <- getMids(ID = ID,
-                                        hb = n_i,
-                                        lb = lower_i,
-                                        ub = upper_i,
-                                        alpha_bound = 2)$alpha
-
                 beta_pareto = last(data_i$min_faixa)
+                if(!is.null(known_groupMeans)){
+
+                        knownMean_i = known_groupMeans %>%
+                                filter(ID == ID_i) %>%
+                                .$mean
+
+                        group_means_by_integral = {
+                                ((m/(3*n_i))*(upper_i^3) + (c/(2*n_i))*(upper_i^2)) - ((m/(3*n_i))*(lower_i^3) + (c/(2*n_i))*(lower_i^2))
+                        }
+
+                        mean_last_group = (1/last(n_i))*(N*knownMean_i - sum(n_i*group_means_by_integral, na.rm = T))
+
+
+                        if(mean_last_group > beta_pareto){
+                                alpha_pareto = mean_last_group/(mean_last_group - beta_pareto)
+                        }else{
+                                alpha_pareto <- getMids(ID = ID_i,
+                                                        hb = n_i,
+                                                        lb = lower_i,
+                                                        ub = upper_i,
+                                                        alpha_bound = 2)$alpha
+                        }
+
+                }else{
+                        alpha_pareto <- getMids(ID = ID_i,
+                                                hb = n_i,
+                                                lb = lower_i,
+                                                ub = upper_i,
+                                                alpha_bound = 2)$alpha
+
+                }
+
                 pareto_upper_bound = exp( log(beta_pareto) - log(1 - 0.995)/alpha_pareto)
 
-                #y = seq(6.5, 5000, 100)
+                if(is.na(pareto_upper_bound)){
+                        pareto_upper_bound = Inf
+                }
+
                 pdf_MCIB = function(y){
 
                         n_brackets = length(lower_i)
@@ -67,9 +98,13 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL){
                         probDensity_closedBrackets = (m_i*y + c_i)/N
 
                         f_pareto_lastBracket = function(y){
-                                beta_pareto = lower_i[n_brackets]
-                                log_PDF = log(alpha_pareto) + alpha_pareto*log(beta_pareto) - (alpha_pareto+1)*log(y)
-                                exp(log_PDF)
+                                if(!is.na(alpha_pareto)){
+                                        beta_pareto = lower_i[n_brackets]
+                                        log_PDF = log(alpha_pareto) + alpha_pareto*log(beta_pareto) - (alpha_pareto+1)*log(y)
+                                        exp(log_PDF)
+                                }else{
+                                        0
+                                }
                         }
 
                         probDensity_openBracket = (n_i[n_brackets]/N)*f_pareto_lastBracket(y)
@@ -79,6 +114,10 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL){
                                              probDensity_openBracket)
 
                         probDensity = ifelse(y < lower_i[1], 0, probDensity)
+
+                        if(is.na(alpha_pareto)){
+                                probDensity[y > last(lower_i)] <- 0
+                        }
 
                         probDensity
                 }
@@ -108,9 +147,12 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL){
 
                         f_pareto_lastBracket = function(y){
 
-                                CDF_pareto = 1 - (beta_pareto/y)^alpha_pareto
-
-                                last(cum_p) + (n_i[n_brackets]/N)*CDF_pareto
+                                if(!is.na(alpha_pareto)){
+                                        CDF_pareto = 1 - (beta_pareto/y)^alpha_pareto
+                                        last(cum_p) + (n_i[n_brackets]/N)*CDF_pareto
+                                }else{
+                                        last(cum_p)
+                                }
                         }
 
                         prob_cum_open = f_pareto_lastBracket(y)
@@ -182,12 +224,24 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL){
 
                         quantile = ifelse(p < 0 | p > 1, NA, quantile)
 
+                        if(is.na(alpha_pareto)){
+                                quantile[p==1] <- last(lower_i)
+                        }
+
                         quantile
                 }
 
-                grand_mean = pracma::integral(function(x) x*pdf_MCIB(x),
-                                              xmin = first(lower_i),
-                                              xmax = pareto_upper_bound)
+                if(!is.null(knownMean_i)){
+                        grand_mean = knownMean_i
+                }else{
+                        if(is.na(alpha_pareto)){
+                                pareto_upper_bound = last(lower_i)
+                        }
+
+                        grand_mean = pracma::integral(function(x) x*pdf_MCIB(x),
+                                                      xmin = first(lower_i),
+                                                      xmax = pareto_upper_bound)
+                }
 
                 lorenz_MCIB = function(x) {
 
@@ -197,6 +251,8 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL){
                         lorenz_i = function(z) integrate(f = f,
                                                          lower = first(lower_i),
                                                          upper = z,
+                                                         rel.tol = .Machine$double.eps^0.275,
+                                                         stop.on.error = FALSE,
                                                          subdivisions = 2000)$value
 
                         # lorenz value for a vector
@@ -208,7 +264,8 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL){
                 lorenz_integral = integrate(f = function(x) lorenz_MCIB(quantile_function_MCIB(x)),
                                             lower = 0,
                                             upper = p_max,
-                                            rel.tol = .Machine$double.eps^0.2,
+                                            rel.tol = .Machine$double.eps^0.25,
+                                            stop.on.error = FALSE,
                                             subdivisions = 2000)$value
 
                 gini = 1 - 2*lorenz_integral
@@ -220,7 +277,6 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL){
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
                 plan(multiprocess)
         }
-
 
         gini_result <- future_map_dbl(.x = data_split,
                                           .f = gini_MCIB,
@@ -238,3 +294,6 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL){
         gini_result
 
 }
+
+
+

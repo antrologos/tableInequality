@@ -2,14 +2,20 @@
 
 calc_gini_MCIB <- function(data_pnad, groups = NULL){
 
-        data_pnad <- data_pnad %>%
-                unite(col = ID, groups) %>%
-                group_by(ID, faixas_renda) %>%
-                summarise(min_faixa = min(min_faixa),
-                          max_faixa = max(max_faixa),
-                          n         = sum(n)) %>%
-                ungroup() %>%
-                arrange(ID, min_faixa)
+        if(is.null(groups)){
+                data_pnad <- data_pnad %>%
+                        mutate(ID = 1) %>%
+                        arrange(ID, min_faixa)
+        }else{
+                data_pnad <- data_pnad %>%
+                        unite(col = ID, groups) %>%
+                        group_by(ID, faixas_renda) %>%
+                        summarise(min_faixa = min(min_faixa),
+                                  max_faixa = max(max_faixa),
+                                  n         = sum(n)) %>%
+                        ungroup() %>%
+                        arrange(ID, min_faixa)
+        }
 
         data_split <- split(data_pnad, f = data_pnad$ID)
 
@@ -27,7 +33,7 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL){
                 lower_i = rowMeans(cbind(lower_i,c(NA, upper_i[-length(upper_i)])),na.rm = T)
                 upper_i = c(lower_i[-1], NA)
 
-                slope_intercept <- estimate_slope_and_intercept_MCIB(lower_i = lower_i,
+                slope_intercept <- tableInequality:::estimate_slope_and_intercept_MCIB(lower_i = lower_i,
                                                                      upper_i = upper_i,
                                                                      n_i = n_i)
 
@@ -42,7 +48,7 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL){
                                         alpha_bound = 2)$alpha
 
                 beta_pareto = last(data_i$min_faixa)
-                pareto_upper_bound = exp( log(beta_pareto) - log(1 - 0.9995)/alpha_pareto)
+                pareto_upper_bound = exp( log(beta_pareto) - log(1 - 0.995)/alpha_pareto)
 
                 #y = seq(6.5, 5000, 100)
                 pdf_MCIB = function(y){
@@ -191,7 +197,7 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL){
                         lorenz_i = function(z) integrate(f = f,
                                                          lower = first(lower_i),
                                                          upper = z,
-                                                         subdivisions = 1000)$value
+                                                         subdivisions = 2000)$value
 
                         # lorenz value for a vector
                         future_map_dbl(x, lorenz_i)
@@ -202,7 +208,8 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL){
                 lorenz_integral = integrate(f = function(x) lorenz_MCIB(quantile_function_MCIB(x)),
                                             lower = 0,
                                             upper = p_max,
-                                            subdivisions = 1000)$value
+                                            rel.tol = .Machine$double.eps^0.2,
+                                            subdivisions = 2000)$value
 
                 gini = 1 - 2*lorenz_integral
 

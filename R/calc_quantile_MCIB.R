@@ -2,14 +2,20 @@
 
 calc_quantile_MCIB <- function(p, data_pnad, groups = NULL){
 
-        data_pnad <- data_pnad %>%
-                unite(col = ID, groups) %>%
-                group_by(ID, faixas_renda) %>%
-                summarise(min_faixa = min(min_faixa),
-                          max_faixa = max(max_faixa),
-                          n         = sum(n)) %>%
-                ungroup() %>%
-                arrange(ID, min_faixa)
+        if(is.null(groups)){
+                data_pnad <- data_pnad %>%
+                        mutate(ID = 1) %>%
+                        arrange(ID, min_faixa)
+        }else{
+                data_pnad <- data_pnad %>%
+                        unite(col = ID, groups) %>%
+                        group_by(ID, faixas_renda) %>%
+                        summarise(min_faixa = min(min_faixa),
+                                  max_faixa = max(max_faixa),
+                                  n         = sum(n)) %>%
+                        ungroup() %>%
+                        arrange(ID, min_faixa)
+        }
 
         data_split <- split(data_pnad, f = data_pnad$ID)
 
@@ -41,7 +47,7 @@ calc_quantile_MCIB <- function(p, data_pnad, groups = NULL){
                                         alpha_bound = 2)$alpha
 
                 beta_pareto = last(data_i$min_faixa)
-                pareto_upper_bound = exp( log(beta_pareto) - log(1 - 0.9995)/alpha_pareto)
+                pareto_upper_bound = exp( log(beta_pareto) - log(1 - 0.995)/alpha_pareto)
 
                 estimated_quantile_function = function(p){
 

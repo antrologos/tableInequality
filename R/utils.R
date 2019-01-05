@@ -135,21 +135,16 @@ estimate_slope_and_intercept_MCIB = function(lower_i = lower_i, upper_i = upper_
         beta_pareto = last(lower_i)
         pareto_upper_bound = exp( log(beta_pareto) - log(1 - 0.9995)/alpha_pareto)
 
-
         # Initial values for slope and intercept
-        m = slopes_MCIB(lower_i = lower_i, upper_i = upper_i, n_i = n_i)
-        c = intercepts_MCIB(lower_i = lower_i, upper_i = upper_i, n_i = n_i, slopes = m)
+        m_initial = slopes_MCIB(lower_i = lower_i, upper_i = upper_i, n_i = n_i)
 
-        # Now we have to check if the estimated slopes produce negative probability densities.
-        # If so, the slopes will be constrained to produce only non-negative densities
+        # A function to check if the estimated slopes produce negative probability densities.
+        pdf_MCIB_slopeTest = function(m){
 
-        # But the new slopes must have same sign as those initially estimated
-        # Here we keep the sign information:
-        m_positive = m[-length(m)] > 0
-
-        # A function that is optimized only if all the probabily densities are positive and
-        # all the constrained slopes have the same sign as the initial ones
-        pdf_MCIB_test = function(m){
+                c_initial = intercepts_MCIB(lower_i = lower_i,
+                                            upper_i = upper_i,
+                                            n_i = n_i,
+                                            slopes = m)
 
                 # The values we will use to evaluate the probability densities are at the
                 # edge of each bracket.
@@ -167,7 +162,7 @@ estimate_slope_and_intercept_MCIB = function(lower_i = lower_i, upper_i = upper_
                 i[y >= lower_i[n_brackets]] <- n_brackets
 
                 m_i = m[i]
-                c_i = c[i]
+                c_i = c_initial[i]
 
                 probDensity_closedBrackets = (m_i*y + c_i)/N
 
@@ -189,19 +184,105 @@ estimate_slope_and_intercept_MCIB = function(lower_i = lower_i, upper_i = upper_
                 probDensity_test[probDensity< 0]   <- -1
                 probDensity_test[probDensity >= 0] <- 1
 
-                probDensity_test[which(! ( (m > 0) ==  m_positive))] <- -1
+                slope_test = tibble(probDensity_test, i) %>%
+                        group_by(i) %>%
+                        summarise(test = min(probDensity_test)) %>%
+                        arrange(i) %>%
+                        .$test
 
-                -sum(probDensity_test)
+                slope_test
         }
 
-        # Optimizing the test function
-        m_corrected = optim(fn = pdf_MCIB_test, par = m[-length(m)])$par
-        m[1:(length(m)-1)] <- m_corrected
+        pdf_MCIB_correctSlope = function(m_particular, m_order){
+
+                m = m_initial
+
+                m[m_order] = m_particular
+
+                # The values we will use to evaluate the probability densities are at the
+                # edge of each bracket.
+                y_lower = lower_i + .000000000001
+                y_upper = upper_i[-length(upper_i)] - .000000000001
+
+                y = c(y_lower, y_upper) %>% sort()
+
+                n_brackets = length(lower_i)
+                i = sapply(y, function(x){
+                        which((x >= lower_i) & (x < upper_i))
+                })
+
+                i = as.numeric(i)
+                i[y >= lower_i[n_brackets]] <- n_brackets
+
+                c = intercepts_MCIB(lower_i = lower_i,
+                                    upper_i = upper_i,
+                                    n_i     = n_i,
+                                    slopes = m)
+
+                m_i = m[i]
+                c_i = c[i]
+
+                probDensity_closedBrackets = (m_i*y + c_i)/N
+
+                f_pareto_lastBracket = function(y){
+                        beta_pareto = lower_i[n_brackets]
+                        log_PDF = log(alpha_pareto) + alpha_pareto*log(beta_pareto) - (alpha_pareto+1)*log(y)
+                        exp(log_PDF)
+                }
+
+                probDensity_openBracket = (n_i[n_brackets]/N)*f_pareto_lastBracket(y)
+
+                probDensity = ifelse(i < n_brackets,
+                                     probDensity_closedBrackets,
+                                     probDensity_openBracket)
+
+                probDensity = ifelse(y < lower_i[1], 0, probDensity)
+
+                probDensity_test = tibble(probDensity, i, y) %>%
+                        filter(i == m_order) %>%
+                        filter(probDensity < 0)
+
+                if(nrow(probDensity_test) > 1) stop("This segment only gives negative densities")
+
+                y = probDensity_test$y
+                p = probDensity_test$probDensity
+
+                new_m = m[m_order]
+
+                n  = n_i[m_order]
+                up = upper_i[m_order]
+                lw = lower_i[m_order]
+
+                infinitesimal = .Machine$double.eps^0.8
+
+                new_m = (infinitesimal -n/(up - lw))/(y - ((up + lw)/2))
+                new_m
+        }
+
+        m_generate_positive = pdf_MCIB_slopeTest(m_initial)>0
+        problematic_m <- which(!m_generate_positive)
+
+        m_corrected <- m_initial
+
+        if(length(problematic_m) >0 ){
+                for(k in 1:length(problematic_m)){
+                        m_order = problematic_m[k]
+                        m_particular = m_corrected[m_order]
+                        m_corrected[m_order] = pdf_MCIB_correctSlope(m_particular = m_particular, m_order = m_order)
+                }
+        }
+
+        test_stillProducesNegative = any(!(pdf_MCIB_slopeTest(m_corrected)>0))
+
+        if(test_stillProducesNegative == T){
+                stop("The slopes could could not be constrained to produce only positive probability densities")
+        }
 
         # re-estimating the intercepts
-        c = intercepts_MCIB(lower_i = lower_i, upper_i = upper_i, n_i = n_i, slopes = m)
+        c = intercepts_MCIB(lower_i = lower_i, upper_i = upper_i, n_i = n_i,
+                            slopes = m_corrected)
 
-        list(m = m, c =c)
+        list(m = m_corrected, c =c)
 }
 
 

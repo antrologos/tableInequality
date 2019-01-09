@@ -21,23 +21,21 @@ calc_mean_stepbins <- function(data_pnad, groups = NULL){
 
         mean_stepbins = function(data){
 
-                fit <- with(data, {
-                        limites  = c(min_faixa[1],max_faixa)
-                        contagem = c(0, n)
-                        stepbins(bEdges = limites, bCounts = contagem)
-                })
+                limites  = c(data$min_faixa[1], data$max_faixa)
+                contagem = c(0, data$n)
 
-                # grand mean
-                mean = integrate(f = function(z){z*fit$stepPDF(z)},
-                                 lower = 0,
-                                 upper =  fit$E,
-                                 subdivisions = 2000,
-                                 stop.on.error = F)$value
+                fit <- stepbins(bEdges = limites, bCounts = contagem)
+
+                # mean by integration (quadrature - Gauss-Legendre)
+                grid_mean = mvQuad::createNIGrid(dim=1, type="GLe", level=75)
+                mvQuad::rescale(grid_mean, domain = matrix(c(0, fit$E), ncol=2))
+
+                mean = mvQuad::quadrature(f = function(y) y*stepPDF(y), grid = grid_mean)
 
                 mean
         }
 
-        mean_result <- map(.x = data_split, .f = mean_stepbins) %>%
+        mean_result <- future_map(.x = data_split, .f = mean_stepbins) %>%
                 tibble(ID = names(.),  mean = unlist(.))
 
         if(is.null(groups)){

@@ -1,6 +1,6 @@
 #' @export
 
-calc_quantile_MCIB <- function(p, data_pnad, groups = NULL, known_groupMeans = NULL){
+calc_quantile_MCIB <- function(p, data_pnad, groups = NULL, known_groupMeans = NULL, topBracket_method = c("gpinter","RPME")){
 
         if(is.null(groups)){
                 data_pnad <- data_pnad %>%
@@ -17,18 +17,19 @@ calc_quantile_MCIB <- function(p, data_pnad, groups = NULL, known_groupMeans = N
                         arrange(ID, min_faixa)
         }
 
-        known_groupMeans <- check_known_groupMeans_DF(data_pnad = data_pnad,
-                                                      groups = groups,
-                                                      known_groupMeans = known_groupMeans)
-
+        known_groupMeans_checked <- tableInequality:::check_known_groupMeans_DF(data_pnad = data_pnad,
+                                                                                groups = groups,
+                                                                                known_groupMeans = known_groupMeans)
 
         data_split <- split(data_pnad, f = data_pnad$ID)
 
-        #data_i = data_split[[5]]
+        topBracket_method_chosen = topBracket_method[1]
 
-        quantile_MCIB = function(p, data_i = data_i){
+        #data_i = data_split[[1]]
 
-                ID = data_i$ID %>% unique()
+        quantile_MCIB = function(p, data_i, topBracket_method_chosen, known_groupMeans_checked){
+
+                ID_i = data_i$ID %>% unique()
                 lower_i = data_i$min_faixa
                 upper_i = data_i$max_faixa
                 n_i     = data_i$n
@@ -38,52 +39,26 @@ calc_quantile_MCIB <- function(p, data_pnad, groups = NULL, known_groupMeans = N
                 lower_i = rowMeans(cbind(lower_i,c(NA, upper_i[-length(upper_i)])),na.rm = T)
                 upper_i = c(lower_i[-1], NA)
 
-                slope_intercept <-estimate_slope_and_intercept_MCIB(lower_i = lower_i,
-                                                                    upper_i = upper_i,
-                                                                    n_i = n_i)
+                slope_intercept <- tableInequality:::estimate_slope_and_intercept_MCIB(lower_i = lower_i,
+                                                                                       upper_i = upper_i,
+                                                                                       n_i = n_i)
                 m = slope_intercept$m
                 c = slope_intercept$c
 
-                beta_pareto = last(data_i$min_faixa)
-                if(!is.null(known_groupMeans)){
 
-                        knownMean_i = known_groupMeans %>%
-                                filter(ID == ID_i) %>%
-                                .$mean
+                quantileFunctionPareto_lastBracket = tableInequality:::make_quantileFunctionPareto_lastBracket(data_i = data_i,
+                                                                                                               topBracket_method_chosen = topBracket_method_chosen,
+                                                                                                               known_groupMeans_checked = known_groupMeans_checked,
+                                                                                                               m = m,
+                                                                                                               c = c)
 
-                        group_means_by_integral = {
-                                ((m/(3*n_i))*(upper_i^3) + (c/(2*n_i))*(upper_i^2)) - ((m/(3*n_i))*(lower_i^3) + (c/(2*n_i))*(lower_i^2))
-                        }
+                pareto_upper_bound = tableInequality:::get_pareto_upper_bound(data_i = data_i,
+                                                                              topBracket_method_chosen = topBracket_method_chosen,
+                                                                              known_groupMeans_checked = known_groupMeans_checked,
+                                                                              m = m,
+                                                                              c = c)
 
-                        mean_last_group = (1/last(n_i))*(N*knownMean_i - sum(n_i*group_means_by_integral, na.rm = T))
-
-
-                        if(mean_last_group > beta_pareto){
-                                alpha_pareto = mean_last_group/(mean_last_group - beta_pareto)
-                        }else{
-                                alpha_pareto <- getMids(ID = ID_i,
-                                                        hb = n_i,
-                                                        lb = lower_i,
-                                                        ub = upper_i,
-                                                        alpha_bound = 2)$alpha
-                        }
-
-                }else{
-                        alpha_pareto <- getMids(ID = ID_i,
-                                                hb = n_i,
-                                                lb = lower_i,
-                                                ub = upper_i,
-                                                alpha_bound = 2)$alpha
-
-                }
-
-                pareto_upper_bound = exp( log(beta_pareto) - log(1 - 0.995)/alpha_pareto)
-
-                if(is.na(pareto_upper_bound)){
-                        pareto_upper_bound = Inf
-                }
-
-                function(p){
+                quantile_function_MCIB = function(p){
 
                         N = sum(n_i)
 
@@ -124,14 +99,7 @@ calc_quantile_MCIB <- function(p, data_pnad, groups = NULL, known_groupMeans = N
                         y_uniform = (p - quantile_data$cum_p_min[i])*(N/c_i) + min_i
                         quantile_closedBracket = ifelse(m_i == 0, y_uniform, quantile_closedBracket)
 
-
-                        f_pareto_quantile = function(p, i){
-                                beta_pareto = last(quantile_data$lower_i)
-                                y =  beta_pareto/((1 - (p - last(cum_p))/(last(n_i)/N))^(1/alpha_pareto)) #quantile function for pareto
-                                y
-                        }
-
-                        quantile_openBracket = f_pareto_quantile(p, i)
+                        quantile_openBracket = quantileFunctionPareto_lastBracket(p)
 
                         quantile = ifelse(i < nrow(quantile_data),
                                           quantile_closedBracket,
@@ -139,15 +107,14 @@ calc_quantile_MCIB <- function(p, data_pnad, groups = NULL, known_groupMeans = N
 
                         quantile = ifelse(p < 0 | p > 1, NA, quantile)
 
-                        if(is.na(alpha_pareto)){
-                                quantile[p==1] <- last(lower_i)
+                        if(last(n_i) == 0){ # tem erro
+                                quantile[p==1] <- lower_i[length(lower_i)-1]
                         }
 
                         quantile
                 }
 
-                quantiles_i = estimated_quantile_function(p = p)
-
+                quantiles_i = quantile_function_MCIB(p)
                 as_tibble(matrix(quantiles_i, nrow = 1)) %>% setNames(p)
 
         }
@@ -156,12 +123,16 @@ calc_quantile_MCIB <- function(p, data_pnad, groups = NULL, known_groupMeans = N
                 plan(multiprocess)
         }
 
-
         quantile_result <- future_map_dfr(.x = data_split,
-                                      .f = quantile_MCIB, p = p,
-                                      .progress = T) %>%
+                                          .f = quantile_MCIB,
+                                          .progress = T,
+                                          p = p,
+                                          topBracket_method_chosen = topBracket_method_chosen,
+                                          known_groupMeans_checked = known_groupMeans_checked,
+                                          .options = future_options(globals = c("known_groupMeans_checked",
+                                                                                "topBracket_method_chosen"),
+                                                                    packages = c("tableInequality", "data.table"))) %>%
                 bind_cols(ID = names(data_split), .)
-
 
         if(is.null(groups)){
                 quantile_result <- quantile_result %>%
@@ -172,5 +143,7 @@ calc_quantile_MCIB <- function(p, data_pnad, groups = NULL, known_groupMeans = N
         }
 
         quantile_result
-
 }
+
+
+

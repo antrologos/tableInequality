@@ -10,7 +10,8 @@ Depends: R (>= 3.4.4),
         gpinter,
         IC2,
         lubridate,
-        maxLik,
+        mvQuad,
+        parallel,
         pracma,
         tidyverse
 License: What license is it under?

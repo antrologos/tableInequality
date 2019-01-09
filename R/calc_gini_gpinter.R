@@ -1,6 +1,6 @@
 #' @export
 
-calc_gini_gpinter <- function(data_pnad, groups = NULL){
+calc_gini_gpinter <- function(data_pnad, groups = NULL, known_groupMeans = NULL){
 
         if(is.null(groups)){
                 data_pnad <- data_pnad %>%
@@ -17,17 +17,19 @@ calc_gini_gpinter <- function(data_pnad, groups = NULL){
                         arrange(ID, min_faixa)
         }
 
+        known_groupMeans = tableInequality:::check_known_groupMeans_DF(data_pnad, groups, known_groupMeans)
+
         data_split <- split(data_pnad, f = data_pnad$ID)
+
+        #data_i = data_split[[1]]
 
         gini_paretoGeneralizada <- function(data_i){
 
-                prob_quantis <- with(data_i, {
-                        p     = n/sum(n)
+                ID_i = data_i$ID %>% unique()
+                p    = data_i$n/sum(data_i$n)
 
-                        tibble(p_cum = c(0, cumsum(p[-length(p)])),
-                               q     =  min_faixa)
-                })
-
+                prob_quantis <- tibble(p_cum = c(0, cumsum(p[-length(p)])),
+                                       q     =  data_i$min_faixa)
 
                 prob_quantis <- prob_quantis %>%
                         filter(p_cum < 1)
@@ -38,9 +40,20 @@ calc_gini_gpinter <- function(data_pnad, groups = NULL){
                         return(NA)
                 }
 
-                pareto_threshold_fitted <- try(
-                        thresholds_fit(p = prob_quantis$p_cum, threshold = prob_quantis$q),
-                        silent = T)
+                if(!is.null(known_groupMeans)){
+                        known_groupMean_i = known_groupMeans %>%
+                                filter(ID == ID_i) %>%
+                                .$mean
+
+                        pareto_threshold_fitted <- try(
+                                thresholds_fit(p = prob_quantis$p_cum, threshold = prob_quantis$q,
+                                               average = known_groupMean_i),
+                                silent = T)
+                }else{
+                        pareto_threshold_fitted <- try(
+                                thresholds_fit(p = prob_quantis$p_cum, threshold = prob_quantis$q),
+                                silent = T)
+                }
 
                 if("try-error" %in% class(pareto_threshold_fitted)){
                         return(NA)
@@ -50,8 +63,14 @@ calc_gini_gpinter <- function(data_pnad, groups = NULL){
 
         }
 
-        gini_result <- map(data_split, gini_paretoGeneralizada) %>%
-                tibble(ID = names(.),  gini = unlist(.))
+        if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
+                plan(multiprocess)
+        }
+
+        gini_result = future_map_dbl(.x = data_split,
+                                     .f = gini_paretoGeneralizada,
+                                     .progress = T) %>%
+                tibble(ID = names(.), gini = .)
 
 
         if(is.null(groups)){

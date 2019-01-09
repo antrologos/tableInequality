@@ -21,23 +21,23 @@ calc_mean_rsubbins <- function(data_pnad, groups = NULL){
 
         mean_rsubbins = function(data){
 
-                fit <- with(data, {
-                        limites  = c(min_faixa[1],max_faixa)
-                        contagem = c(0, n)
-                        rsubbins(bEdges = limites, bCounts = contagem)
-                })
+                limites  = c(data$min_faixa[1], data$max_faixa)
+                contagem = c(0, data$n)
+
+                fit <- rsubbins(bEdges = limites, bCounts = contagem)
 
                 # grand mean
-                mean = integrate(f = function(z){z*fit$rsubPDF(z)},
-                                 lower = 0,
-                                 upper =  fit$E,
-                                 subdivisions = 2000,
-                                 stop.on.error = F)$value
+                # mean by integration (quadrature - Gauss-Legendre)
+                grid_mean = mvQuad::createNIGrid(dim=1, type="GLe", level=75)
+                mvQuad::rescale(grid_mean, domain = matrix(c(0, fit$E), ncol=2))
+
+                mean = mvQuad::quadrature(f = function(y) y*rsubPDF(y), grid = grid_mean)
 
                 mean
+
         }
 
-        mean_result <- map(.x = data_split, .f = mean_rsubbins) %>%
+        mean_result <- future_map(.x = data_split, .f = mean_rsubbins) %>%
                 tibble(ID = names(.),  mean = unlist(.))
 
         if(is.null(groups)){

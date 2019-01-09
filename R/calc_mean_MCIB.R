@@ -1,6 +1,6 @@
 #' @export
 
-calc_mean_MCIB <- function(data_pnad, groups = NULL){
+calc_mean_MCIB <- function(data_pnad, groups = NULL, topBracket_method = c("gpinter", "RMPE")){
 
         if(is.null(groups)){
                 data_pnad <- data_pnad %>%
@@ -17,13 +17,16 @@ calc_mean_MCIB <- function(data_pnad, groups = NULL){
                         arrange(ID, min_faixa)
         }
 
+
         data_split <- split(data_pnad, f = data_pnad$ID)
+
+        topBracket_method_chosen = topBracket_method[1]
 
         #data_i = data_split[[1]]
 
-        mean_MCIB = function(data_i){
+        mean_MCIB = function(data_i, topBracket_method_chosen){
 
-                ID = data_i$ID %>% unique()
+                ID_i = data_i$ID %>% unique()
                 lower_i = data_i$min_faixa
                 upper_i = data_i$max_faixa
                 n_i     = data_i$n
@@ -34,22 +37,23 @@ calc_mean_MCIB <- function(data_pnad, groups = NULL){
                 upper_i = c(lower_i[-1], NA)
 
                 slope_intercept <- tableInequality:::estimate_slope_and_intercept_MCIB(lower_i = lower_i,
-                                                                     upper_i = upper_i,
-                                                                     n_i = n_i)
-
+                                                                                       upper_i = upper_i,
+                                                                                       n_i = n_i)
                 m = slope_intercept$m
                 c = slope_intercept$c
 
-                alpha_pareto <- getMids(ID = ID,
-                                        hb = n_i,
-                                        lb = lower_i,
-                                        ub = upper_i,
-                                        alpha_bound = 2)$alpha
+                PDFpareto_lastBracket = tableInequality:::make_PDFpareto_lastBracket(data_i = data_i,
+                                                                                     topBracket_method_chosen = topBracket_method_chosen,
+                                                                                     known_groupMeans_checked = NULL,
+                                                                                     m = m,
+                                                                                     c = c)
 
-                beta_pareto = last(data_i$min_faixa)
-                pareto_upper_bound = exp( log(beta_pareto) - log(1 - 0.995)/alpha_pareto)
+                pareto_upper_bound = tableInequality:::get_pareto_upper_bound(data_i = data_i,
+                                                                              topBracket_method_chosen = topBracket_method_chosen,
+                                                                              known_groupMeans_checked = NULL,
+                                                                              m = m,
+                                                                              c = c)
 
-                #y = seq(6.5, 5000, 100)
                 pdf_MCIB = function(y){
 
                         n_brackets = length(lower_i)
@@ -63,19 +67,8 @@ calc_mean_MCIB <- function(data_pnad, groups = NULL){
                         m_i = m[i]
                         c_i = c[i]
 
-                        probDensity_closedBrackets = (m_i*y + c_i)/N
-
-                        f_pareto_lastBracket = function(y){
-                                if(!is.na(alpha_pareto)){
-                                        beta_pareto = lower_i[n_brackets]
-                                        log_PDF = log(alpha_pareto) + alpha_pareto*log(beta_pareto) - (alpha_pareto+1)*log(y)
-                                        exp(log_PDF)
-                                }else{
-                                        0
-                                }
-                        }
-
-                        probDensity_openBracket = (n_i[n_brackets]/N)*f_pareto_lastBracket(y)
+                        probDensity_closedBrackets <- (m_i*y + c_i)/N
+                        probDensity_openBracket    <- PDFpareto_lastBracket(y)
 
                         probDensity = ifelse(i < n_brackets,
                                              probDensity_closedBrackets,
@@ -83,33 +76,32 @@ calc_mean_MCIB <- function(data_pnad, groups = NULL){
 
                         probDensity = ifelse(y < lower_i[1], 0, probDensity)
 
-                        if(is.na(alpha_pareto)){
+                        if(last(n_i) == 0){
                                 probDensity[y > last(lower_i)] <- 0
                         }
 
                         probDensity
                 }
 
-                if(is.na(alpha_pareto)){
-                        pareto_upper_bound = last(lower_i)
-                }
 
-                mean = pracma::integral(function(x) x*pdf_MCIB(x),
-                                        xmin = first(lower_i),
-                                        xmax = pareto_upper_bound)
+                nw = createNIGrid(dim=1, type="GLe", level=75)
+                rescale(nw, domain = matrix(c(first(lower_i), pareto_upper_bound), ncol=2))
+
+                mean = quadrature(f = function(y) y*pdf_MCIB(y), grid = nw)
 
                 mean
-
         }
 
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
                 plan(multiprocess)
         }
 
-
         mean_result <- future_map_dbl(.x = data_split,
                                       .f = mean_MCIB,
-                                      .progress = T) %>%
+                                      topBracket_method_chosen = topBracket_method_chosen,
+                                      .progress = T,
+                                      .options = future_options(globals = c("topBracket_method_chosen"),
+                                                                packages = c("tableInequality", "data.table"))) %>%
                 tibble(ID = names(.), mean = .)
 
         if(is.null(groups)){

@@ -1,65 +1,68 @@
-
 # Numeric calculation of the Lorenz Curve
 lorenz <- function(x, PDF_func, lowerbound = 0, upperbound) {
 
         # grand mean
-        #mu = pracma::integral(function(z){z*PDF_func(z)}, lowerbound, upperbound)
-        mu = integrate(f = function(z){z*PDF_func(z)},
-                       lower = lowerbound,
-                       upper = upperbound,
-                       stop.on.error = FALSE,
-                       subdivisions = 2000)$value
+        grid_mean = mvQuad::createNIGrid(dim=1, type="GLe", level=75)
+        mvQuad::rescale(grid_mean, domain = matrix(c(lowerbound, upperbound), ncol=2))
+        mu = mvQuad::quadrature(f = function(y) y*PDF_func(y), grid = grid_mean)
 
         # lorenz value for one observation
-        #lorenz_i = function(y) { (1/mu)*pracma::integral(function(y){y*PDF_func(y)}, lowerbound, y) }
-        lorenz_i = function(y) { (1/mu)*integrate(f = function(y){y*PDF_func(y)},
-                                                  lower = lowerbound,
-                                                  upper = y,
-                                                  stop.on.error = FALSE,
-                                                  subdivisions = 2000)$value }
+        lorenz_i = function(y){
+                grid_lorenz = mvQuad::createNIGrid(dim=1, type="GLe", level=75)
+                mvQuad::rescale(grid_lorenz, domain = matrix(c(lowerbound, y), ncol=2))
+
+                mvQuad::quadrature(f = function(y) (1/mu)*y*PDF_func(y),
+                                   grid = grid_lorenz)
+        }
 
         # lorenz value for a vector
-        future_map_dbl(x, lorenz_i)
+        lorenz_vector = Vectorize(lorenz_i)
+
+        lorenz_vector(x)
 }
 
 # function for numeric calculation of a inverse function
 # (the quantile function is the inverse of the CDF)
 inverse = function (f, lower = -100, upper = 100, extendInt = "no") {
-        function (y) uniroot((function(x) f(x) - y), lower = lower, upper = upper,  extendInt = extendInt)
+        function (y) uniroot((function(x) f(x) - y), lower = lower, upper = upper,  extendInt = extendInt)$root
 }
+
+
 
 # Numeric calculation of the quantile function
 quantile = function(p, CDF_func, max_x){
         # quantile for one observation
         quantile_i = inverse(CDF_func, lower = 0, upper = max_x, extendInt = "yes")
 
+        quantile_vector = Vectorize(quantile_i)
+
         # quantile for a vector
-        future_map_dbl(p, function(p) quantile_i(p)$root)
+        #future_map_dbl(p, function(p) quantile_i(p)$root)
+        quantile_vector(p)
 }
 
 
 # Gini index
 gini_numerical_integration <- function(PDF_func,  CDF_func, max_x){
-        #1 - 2*pracma::integral(function(x){
-        #        lorenz(
-        #                quantile(x, CDF_func = CDF_func, max_x = max_x),
-        #
-        #                      PDF_func   = PDF_func,
-        #               upperbound = max_x)}, xmin = 0, xmax = 1)
 
+        # NUMERICAL INTEGRAL - QUADRATURE
+        # create grid
+        grid_quantiles_to_lorenz = mvQuad::createNIGrid(dim=1, type="nLe", level=25)
 
-        1 - 2*integrate(f = function(x){
-                lorenz(
-                        quantile(x, CDF_func = CDF_func, max_x = max_x),
-                        PDF_func   = PDF_func,
-                        upperbound = max_x)},
-                lower = 0,
-                upper = 1,
-                stop.on.error = FALSE,
-                subdivisions = 2000)$value
+        # compute the approximated value of the integral
+        lorenz_integral = mvQuad::quadrature(f = function(x) lorenz(quantile(x,
+                                                                     CDF_func = CDF_func,
+                                                                     max_x = max_x),
+                                                            PDF_func = PDF_func,
+                                                            lowerbound = 0,
+                                                            upperbound = max_x),
+                                     grid = grid_quantiles_to_lorenz)
 
+        gini = 1 - 2*lorenz_integral
 
+        gini
 }
+
 
 future_map_parallel <- function(.x, .f, ..., .progress = FALSE, .options = future_options()){
 
@@ -239,8 +242,8 @@ estimate_slope_and_intercept_MCIB = function(lower_i = lower_i, upper_i = upper_
                 probDensity = ifelse(y < lower_i[1], 0, probDensity)
 
                 probDensity_test = tibble(probDensity, i, y) %>%
-                        filter(i == m_order) %>%
-                        filter(probDensity < 0)
+                        dplyr::filter(i == m_order) %>%
+                        dplyr::filter(probDensity < 0)
 
                 if(nrow(probDensity_test) > 1) stop("This segment only gives negative densities")
 
@@ -355,4 +358,451 @@ check_known_groupMeans_DF <- function(data_pnad, groups = NULL, known_groupMeans
                 NULL
 
         }
+}
+
+
+
+make_pdf_gpinter <- function(data_i, known_groupMeans_checked){
+
+        ID_i = data_i$ID %>% unique()
+        p    = data_i$n/sum(data_i$n)
+
+        prob_quantis <- tibble(p_cum = c(0, cumsum(p[-length(p)])),
+                               q     =  data_i$min_faixa)
+
+        prob_quantis <- prob_quantis %>%
+                dplyr::filter(p_cum < 1)
+        min_p <- last(which(prob_quantis$p_cum == 0))
+        prob_quantis <- prob_quantis[min_p:nrow(prob_quantis),]
+
+        if(sum(prob_quantis$p_cum > 0) < 3){
+                return(NA)
+        }
+
+        if(!is.null(known_groupMeans_checked)){
+                known_groupMean_i = known_groupMeans_checked[known_groupMeans_checked$ID == ID_i,]$mean
+
+                pareto_threshold_fitted <- try(
+                        thresholds_fit(p = prob_quantis$p_cum, threshold = prob_quantis$q,
+                                       average = known_groupMean_i),
+                        silent = T)
+        }else{
+                pareto_threshold_fitted <- try(
+                        thresholds_fit(p = prob_quantis$p_cum, threshold = prob_quantis$q),
+                        silent = T)
+        }
+
+        if("try-error" %in% class(pareto_threshold_fitted)){
+                return(NA)
+        }
+
+        function(y) fitted_density(dist = pareto_threshold_fitted, x = y)
+
+
+}
+
+
+
+make_PDFpareto_lastBracket = function(data_i, topBracket_method_chosen, known_groupMeans_checked, m, c){
+
+        ID_i    = data_i$ID %>% unique()
+        lower_i = data_i$min_faixa
+        upper_i = data_i$max_faixa
+        n_i     = data_i$n
+
+        N = sum(n_i)
+
+        lower_i = rowMeans(cbind(lower_i,c(NA, upper_i[-length(upper_i)])),na.rm = T)
+        upper_i = c(lower_i[-1], NA)
+
+        if(is.null(known_groupMeans_checked)){ # If there is no information about the grand mean
+
+                test = is.character(topBracket_method_chosen) & topBracket_method_chosen %in% c("gpinter", "RPME")
+                if(test == FALSE){
+                        stop("'topBracket_method' must be 'gpinter' or 'RPME'")
+                }
+
+
+                if(topBracket_method_chosen == "RPME"){
+                        beta_pareto = last(lower_i)
+
+                        alpha_pareto <- getMids(ID = ID_i,
+                                                hb = n_i,
+                                                lb = lower_i,
+                                                ub = upper_i,
+                                                alpha_bound = 2)$alpha
+
+                        f_pareto_lastBracket = function(y){
+                                # Probability density that uses alpha obtained from robust two-point estimation strategy
+                                if(!is.na(alpha_pareto)){
+                                        log_PDF = log(alpha_pareto) + alpha_pareto*log(beta_pareto) - (alpha_pareto+1)*log(y)
+                                        PDF     = exp(log_PDF)
+
+                                        (last(n_i)/N)*PDF
+                                }else{
+                                        0
+                                }
+                        }
+                }
+
+                if(topBracket_method_chosen == "gpinter"){
+                        f_pareto_lastBracket = make_pdf_gpinter(data_i, known_groupMeans_checked)
+                }
+
+        }else{ # If there is information about the grand mean
+
+                known_groupMean_i = known_groupMeans_checked[known_groupMeans_checked$ID == ID_i,]$mean
+
+                group_means_by_integral = {
+                        ((m/(3*n_i))*(upper_i^3) + (c/(2*n_i))*(upper_i^2)) - ((m/(3*n_i))*(lower_i^3) + (c/(2*n_i))*(lower_i^2))
+                }
+
+                mean_last_group = (1/last(n_i))*(N*known_groupMean_i - sum(n_i*group_means_by_integral, na.rm = T))
+
+                beta_pareto <- last(lower_i)
+
+                if(mean_last_group > beta_pareto){
+                        # Estimating alpha using the information about the grand mean
+                        alpha_pareto = mean_last_group/(mean_last_group - beta_pareto)
+                }else{
+                        # If there is any problem or impossibility to estimate alpha using the mean-constrained strategy,
+                        # we will use the robust two-point estimate
+                        alpha_pareto <- getMids(ID = ID_i,
+                                                hb = n_i,
+                                                lb = lower_i,
+                                                ub = upper_i,
+                                                alpha_bound = 2)$alpha
+                }
+
+                f_pareto_lastBracket = function(y){
+                        # Probability density that uses the alpha estimated taking into account the grand mean
+                        if(!is.na(alpha_pareto)){
+                                log_PDF = log(alpha_pareto) + alpha_pareto*log(beta_pareto) - (alpha_pareto+1)*log(y)
+                                PDF     = exp(log_PDF)
+
+                                (last(n_i)/N)*PDF
+                        }else{
+                                0
+                        }
+                }
+
+        }
+
+        f_pareto_lastBracket
+}
+
+
+get_pareto_upper_bound = function(data_i,
+                                  topBracket_method_chosen,
+                                  known_groupMeans_checked,
+                                  m, c){
+
+        ID_i    = data_i$ID %>% unique()
+        lower_i = data_i$min_faixa
+        upper_i = data_i$max_faixa
+        n_i     = data_i$n
+
+        N = sum(n_i)
+
+        lower_i = rowMeans(cbind(lower_i,c(NA, upper_i[-length(upper_i)])),na.rm = T)
+        upper_i = c(lower_i[-1], NA)
+
+        beta_pareto = last(lower_i)
+
+        if(is.null(known_groupMeans_checked)){ # If there is no information about the grand mean
+
+                if(topBracket_method_chosen == "RPME"){
+
+                        alpha_pareto <- getMids(ID = ID_i,
+                                                hb = n_i,
+                                                lb = lower_i,
+                                                ub = upper_i,
+                                                alpha_bound = 2)$alpha
+                }
+
+
+        }else{
+                known_groupMean_i = known_groupMeans_checked[known_groupMeans_checked$ID == ID_i,]$mean
+
+                group_means_by_integral = {
+                        ((m/(3*n_i))*(upper_i^3) + (c/(2*n_i))*(upper_i^2)) - ((m/(3*n_i))*(lower_i^3) + (c/(2*n_i))*(lower_i^2))
+                }
+
+                mean_last_group = (1/last(n_i))*(N*known_groupMean_i - sum(n_i*group_means_by_integral, na.rm = T))
+
+                if(mean_last_group > beta_pareto){
+                        # Estimating alpha using the information about the grand mean
+                        alpha_pareto = mean_last_group/(mean_last_group - beta_pareto)
+                }else{
+                        # If there is any problem or impossibility to estimate alpha using the mean-constrained strategy,
+                        # we will use the robust two-point estimate
+                        alpha_pareto <- getMids(ID = ID_i,
+                                                hb = n_i,
+                                                lb = lower_i,
+                                                ub = upper_i,
+                                                alpha_bound = 2)$alpha
+                }
+
+        }
+
+        if(topBracket_method_chosen == "gpinter"){
+                alpha_pareto = NA
+        }
+
+        pareto_upper_bound = exp( log(beta_pareto) - log(1 - 0.995)/alpha_pareto)
+
+
+        if(is.na(pareto_upper_bound) & last(n_i) > 0){
+                pareto_upper_bound = Inf
+        }
+
+        if(is.na(pareto_upper_bound) & last(n_i) == 0){
+                pareto_upper_bound = last(lower_i)
+        }
+
+        pareto_upper_bound
+}
+
+
+make_cdf_gpinter <- function(data_i, known_groupMeans_checked){
+
+        ID_i = data_i$ID %>% unique()
+        p    = data_i$n/sum(data_i$n)
+
+        prob_quantis <- tibble(p_cum = c(0, cumsum(p[-length(p)])),
+                               q     =  data_i$min_faixa)
+
+        prob_quantis <- prob_quantis %>%
+                dplyr::filter(p_cum < 1)
+        min_p <- last(which(prob_quantis$p_cum == 0))
+        prob_quantis <- prob_quantis[min_p:nrow(prob_quantis),]
+
+        if(sum(prob_quantis$p_cum > 0) < 3){
+                return(NA)
+        }
+
+        if(!is.null(known_groupMeans_checked)){
+
+                known_groupMean_i = known_groupMeans_checked[known_groupMeans_checked$ID == ID_i,]$mean
+
+                pareto_threshold_fitted <- try(
+                        thresholds_fit(p = prob_quantis$p_cum, threshold = prob_quantis$q,
+                                       average = known_groupMean_i),
+                        silent = T)
+        }else{
+                pareto_threshold_fitted <- try(
+                        thresholds_fit(p = prob_quantis$p_cum, threshold = prob_quantis$q),
+                        silent = T)
+        }
+
+        if("try-error" %in% class(pareto_threshold_fitted)){
+                return(NA)
+        }
+
+        function(y) fitted_cdf(dist = pareto_threshold_fitted, x = y)
+}
+
+
+make_CDFpareto_lastBracket = function(data_i, topBracket_method_chosen, known_groupMeans_checked, m, c){
+
+        ID_i    = data_i$ID %>% unique()
+        lower_i = data_i$min_faixa
+        upper_i = data_i$max_faixa
+        n_i     = data_i$n
+
+        N = sum(n_i)
+
+        lower_i = rowMeans(cbind(lower_i,c(NA, upper_i[-length(upper_i)])),na.rm = T)
+        upper_i = c(lower_i[-1], NA)
+
+        cum_p = cumsum(n_i)/N
+        cum_p = c(0,cum_p[-length(cum_p)])
+
+        if(is.null(known_groupMeans_checked)){ # If there is no information about the grand mean
+
+                test = is.character(topBracket_method_chosen) & topBracket_method_chosen %in% c("gpinter", "RPME")
+                if(test == FALSE){
+                        stop("'topBracket_method' must be 'gpinter' or 'RPME'")
+                }
+
+                if(topBracket_method_chosen == "RPME"){
+                        beta_pareto = last(lower_i)
+
+                        alpha_pareto <- getMids(ID = ID_i,
+                                                hb = n_i,
+                                                lb = lower_i,
+                                                ub = upper_i,
+                                                alpha_bound = 2)$alpha
+
+                        f_pareto_lastBracket = function(y){
+                                # Cumulative density function that uses alpha obtained from robust two-point
+                                # estimation strategy
+                                if(!is.na(alpha_pareto)){
+                                        CDF_pareto = 1 - (beta_pareto/y)^alpha_pareto
+                                        last(cum_p) + (last(n_i)/N)*CDF_pareto
+                                }else{
+                                        last(cum_p)
+                                }
+                        }
+                }
+
+                if(topBracket_method_chosen == "gpinter"){
+                        f_pareto_lastBracket = make_cdf_gpinter(data_i, known_groupMeans_checked)
+                }
+
+
+        }else{ # If there is information about the grand mean
+
+                known_groupMean_i = known_groupMeans_checked[known_groupMeans_checked$ID == ID_i,]$mean
+
+                group_means_by_integral = {
+                        ((m/(3*n_i))*(upper_i^3) + (c/(2*n_i))*(upper_i^2)) - ((m/(3*n_i))*(lower_i^3) + (c/(2*n_i))*(lower_i^2))
+                }
+
+                mean_last_group = (1/last(n_i))*(N*known_groupMean_i - sum(n_i*group_means_by_integral, na.rm = T))
+
+                beta_pareto <- last(lower_i)
+                if(mean_last_group > beta_pareto){
+                        # Estimating alpha using the information about the grand mean
+                        alpha_pareto = mean_last_group/(mean_last_group - beta_pareto)
+                }else{
+                        # If there is any problem or impossibility to estimate alpha using the mean-constrained strategy,
+                        # we will use the robust two-point estimate
+                        alpha_pareto <- getMids(ID = ID_i,
+                                                hb = n_i,
+                                                lb = lower_i,
+                                                ub = upper_i,
+                                                alpha_bound = 2)$alpha
+                }
+
+                f_pareto_lastBracket = function(y){
+                        # Cumulative density function that uses the alpha estimated taking into account the grand mean
+                        if(!is.na(alpha_pareto)){
+                                CDF_pareto = 1 - (beta_pareto/y)^alpha_pareto
+                                last(cum_p) + (last(n_i)/N)*CDF_pareto
+                        }else{
+                                last(cum_p)
+                        }
+                }
+        }
+        f_pareto_lastBracket
+}
+
+
+make_quantileFunction_gpinter <- function(data_i, known_groupMeans_checked){
+
+        ID_i = data_i$ID %>% unique()
+        p    = data_i$n/sum(data_i$n)
+
+        prob_quantis <- tibble(p_cum = c(0, cumsum(p[-length(p)])),
+                               q     =  data_i$min_faixa)
+
+        prob_quantis <- prob_quantis %>%
+                dplyr::filter(p_cum < 1)
+        min_p <- last(which(prob_quantis$p_cum == 0))
+        prob_quantis <- prob_quantis[min_p:nrow(prob_quantis),]
+
+        if(sum(prob_quantis$p_cum > 0) < 3){
+                return(NA)
+        }
+
+        if(!is.null(known_groupMeans_checked)){
+
+                known_groupMean_i = known_groupMeans_checked[known_groupMeans_checked$ID == ID_i,]$mean
+
+                pareto_threshold_fitted <- try(
+                        thresholds_fit(p = prob_quantis$p_cum, threshold = prob_quantis$q,
+                                       average = known_groupMean_i),
+                        silent = T)
+        }else{
+                pareto_threshold_fitted <- try(
+                        thresholds_fit(p = prob_quantis$p_cum, threshold = prob_quantis$q),
+                        silent = T)
+        }
+
+        if("try-error" %in% class(pareto_threshold_fitted)){
+                return(NA)
+        }
+
+        function(p) fitted_quantile(dist = pareto_threshold_fitted, probs = p)
+}
+
+
+make_quantileFunctionPareto_lastBracket = function(data_i, topBracket_method_chosen, known_groupMeans_checked, m, c){
+
+        ID_i    = data_i$ID %>% unique()
+        lower_i = data_i$min_faixa
+        upper_i = data_i$max_faixa
+        n_i     = data_i$n
+
+        N = sum(n_i)
+
+        lower_i = rowMeans(cbind(lower_i,c(NA, upper_i[-length(upper_i)])),na.rm = T)
+        upper_i = c(lower_i[-1], NA)
+
+        cum_p = cumsum(n_i)/N
+        cum_p = c(0,cum_p[-length(cum_p)])
+
+        if(is.null(known_groupMeans_checked)){ # If there is no information about the grand mean
+
+                test = is.character(topBracket_method_chosen) & topBracket_method_chosen %in% c("gpinter", "RPME")
+                if(test == FALSE){
+                        stop("'topBracket_method' must be 'gpinter' or 'RPME'")
+                }
+
+                if(topBracket_method_chosen == "RPME"){
+                        beta_pareto = last(lower_i)
+
+                        alpha_pareto <- getMids(ID = ID_i,
+                                                hb = n_i,
+                                                lb = lower_i,
+                                                ub = upper_i,
+                                                alpha_bound = 2)$alpha
+
+                        f_pareto_lastBracket = function(p){
+                                # quantile function that uses alpha obtained from robust two-point estimation strategy
+                                y =  beta_pareto/((1 - (p - last(cum_p))/(last(n_i)/N))^(1/alpha_pareto)) #quantile function for pareto
+                                y
+                        }
+
+                }
+
+                if(topBracket_method_chosen == "gpinter"){
+                        f_pareto_lastBracket = make_quantileFunction_gpinter(data_i, known_groupMeans_checked)
+                }
+
+
+        }else{ # If there is information about the grand mean
+
+                known_groupMean_i = known_groupMeans_checked[known_groupMeans_checked$ID == ID_i,]$mean
+
+                group_means_by_integral = {
+                        ((m/(3*n_i))*(upper_i^3) + (c/(2*n_i))*(upper_i^2)) - ((m/(3*n_i))*(lower_i^3) + (c/(2*n_i))*(lower_i^2))
+                }
+
+                mean_last_group = (1/last(n_i))*(N*known_groupMean_i - sum(n_i*group_means_by_integral, na.rm = T))
+
+                beta_pareto <- last(lower_i)
+                if(mean_last_group > beta_pareto){
+                        # Estimating alpha using the information about the grand mean
+                        alpha_pareto = mean_last_group/(mean_last_group - beta_pareto)
+                }else{
+                        # If there is any problem or impossibility to estimate alpha using the mean-constrained strategy,
+                        # we will use the robust two-point estimate
+                        alpha_pareto <- getMids(ID = ID_i,
+                                                hb = n_i,
+                                                lb = lower_i,
+                                                ub = upper_i,
+                                                alpha_bound = 2)$alpha
+                }
+
+                f_pareto_lastBracket = function(p){
+                        # quantile function function that uses the alpha estimated taking into account the grand mean
+                        y =  beta_pareto/((1 - (p - last(cum_p))/(last(n_i)/N))^(1/alpha_pareto)) #quantile function for pareto
+                        y
+                }
+
+        }
+
+        f_pareto_lastBracket
 }

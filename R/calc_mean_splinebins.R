@@ -26,16 +26,16 @@ calc_mean_splinebins <- function(data_pnad, groups = NULL){
 
                 fit <- splinebins(bEdges = limites, bCounts = contagem)
 
-                # grand mean
-                mean = integrate(f = function(z){z*fit$splinePDF(z)},
-                                 lower = 0,
-                                 upper =  fit$E,
-                                 subdivisions = 2000,
-                                 stop.on.error = F)$value
+                # mean by integration (quadrature - Gauss-Legendre)
+                grid_mean = mvQuad::createNIGrid(dim=1, type="GLe", level=75)
+                mvQuad::rescale(grid_mean, domain = matrix(c(0, fit$E), ncol=2))
+
+                mean = mvQuad::quadrature(f = function(y) y*splinePDF(y), grid = grid_mean)
+
                 mean
         }
 
-        mean_result <- map(.x = data_split, .f = mean_splinebins) %>%
+        mean_result <- future_map(.x = data_split, .f = mean_splinebins) %>%
                 tibble(ID = names(.),  mean = unlist(.))
 
         if(is.null(groups)){

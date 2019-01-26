@@ -20,7 +20,7 @@ calc_gini_logNormal <- function(data_pnad,
 
         data_split <- split(data_pnad, f = data_pnad$ID)
 
-        #data_i = data_split[[1]]
+        #data_i = data_split[[700]]
         gini_logNormal = function(data_i){
 
                 #for(i in 1:length(data_split)){
@@ -55,14 +55,17 @@ calc_gini_logNormal <- function(data_pnad,
                         })
                 }
 
-                parameters <- try( maxLik(logLik = function(x) -likelihood(x),
+                parameters <- try( maxLik::maxLik(logLik = function(x) -likelihood(x),
                                           start = c(1,1)),
                                    silent = TRUE)
 
                 if("try-error" %in% class(parameters)){
                         parameters <- nlm(f = likelihood, p = c(1,1))
-                }else if(parameters$code == 3){
-                        parameters <- nlm(f = likelihood, p = c(1,1))
+                }else{
+                        if(parameters$code == 3){
+                                parameters <- maxLik::maxLik(logLik = function(x) -likelihood(x),
+                                               start = c(1,1), method = "BFGS")
+                        }
                 }
 
                 mu     = parameters$estimate[1]
@@ -82,7 +85,12 @@ calc_gini_logNormal <- function(data_pnad,
                 gini_lognormal
         }
 
-        gini_result <- map_df(data_split, gini_logNormal)
+        if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
+                plan(multiprocess)
+        }
+
+        gini_result <- future_map_dfr(data_split, gini_logNormal, .progress = T)
+
         gini_result <- tibble(ID   = rownames(t(gini_result)),
                               gini = t(gini_result)[,1])
 

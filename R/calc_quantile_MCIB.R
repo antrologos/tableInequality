@@ -97,19 +97,26 @@ calc_quantile_MCIB <- function(p, data_pnad, groups = NULL, known_groupMeans = N
 
                         # Quantiles for closed brackets with uniform densities
                         y_uniform = (p - quantile_data$cum_p_min[i])*(N/c_i) + min_i
-                        quantile_closedBracket = ifelse(m_i == 0, y_uniform, quantile_closedBracket)
+                        quantile_closedBracket = ifelse(m_i == 0 & c_i >0,
+                                                        y_uniform,
+                                                        quantile_closedBracket)
 
-                        quantile_openBracket = quantileFunctionPareto_lastBracket(p)
+                        if(!is.null(quantileFunctionPareto_lastBracket)){
+                                quantile_openBracket = quantileFunctionPareto_lastBracket(p)
+                        }else{
+                                quantile_openBracket <- rep(NA, length(p))
+                        }
 
                         quantile = ifelse(i < nrow(quantile_data),
                                           quantile_closedBracket,
                                           quantile_openBracket)
 
-                        quantile = ifelse(p < 0 | p > 1, NA, quantile)
-
-                        if(last(n_i) == 0){ # tem erro
-                                quantile[p==1] <- lower_i[length(lower_i)-1]
+                        if(last(n_i) == 0){
+                                last_valid <- last(which(n_i > 0))
+                                quantile[p==1] = upper_i[last_valid]
                         }
+
+                        quantile = ifelse(p < 0 | p > 1, NA, quantile)
 
                         quantile
                 }

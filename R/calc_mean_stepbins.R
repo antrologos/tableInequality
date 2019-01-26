@@ -30,7 +30,7 @@ calc_mean_stepbins <- function(data_pnad, groups = NULL){
                 grid_mean = mvQuad::createNIGrid(dim=1, type="GLe", level=75)
                 mvQuad::rescale(grid_mean, domain = matrix(c(0, fit$E), ncol=2))
 
-                mean = mvQuad::quadrature(f = function(y) y*stepPDF(y), grid = grid_mean)
+                mean = mvQuad::quadrature(f = function(y) y*fit$stepPDF(y), grid = grid_mean)
 
                 mean
         }

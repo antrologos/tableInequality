@@ -51,12 +51,12 @@ gini_numerical_integration <- function(PDF_func,  CDF_func, max_x){
 
         # compute the approximated value of the integral
         lorenz_integral = mvQuad::quadrature(f = function(x) lorenz(quantile(x,
-                                                                     CDF_func = CDF_func,
-                                                                     max_x = max_x),
-                                                            PDF_func = PDF_func,
-                                                            lowerbound = 0,
-                                                            upperbound = max_x),
-                                     grid = grid_quantiles_to_lorenz)
+                                                                             CDF_func = CDF_func,
+                                                                             max_x = max_x),
+                                                                    PDF_func = PDF_func,
+                                                                    lowerbound = 0,
+                                                                    upperbound = max_x),
+                                             grid = grid_quantiles_to_lorenz)
 
         gini = 1 - 2*lorenz_integral
 
@@ -74,7 +74,7 @@ future_map_parallel <- function(.x, .f, ..., .progress = FALSE, .options = futur
 }
 
 
-slopes_MCIB = function(lower_i, upper_i, n_i){
+slopes_MCIB = function(lower_i, upper_i, n_i, firstBracket_flat = TRUE){
 
         b_i = seq_along(n_i)
         freq_per_money <- n_i/(upper_i - lower_i) #freq_per_money
@@ -113,7 +113,13 @@ slopes_MCIB = function(lower_i, upper_i, n_i){
 
         m[higher_both_neighbours] = 0
         m[lower_both_neighbours]  = 0
-        m[1] = 0
+
+        if(firstBracket_flat == TRUE){
+                m[1] = 0
+        }
+
+        m[n_i == 0] = 0
+        m[is.na(upper_i)] <- NA
 
         m
 }
@@ -121,25 +127,32 @@ slopes_MCIB = function(lower_i, upper_i, n_i){
 intercepts_MCIB = function(lower_i, upper_i, n_i, slopes){
         # Intercepts
         c = n_i/(upper_i - lower_i) - slopes*((upper_i + lower_i)/2)
+
+        c[n_i == 0] <- 0
+        c[is.na(upper_i)] <- NA
+
         c
 }
 
 
-estimate_slope_and_intercept_MCIB = function(lower_i = lower_i, upper_i = upper_i, n_i = n_i){
+estimate_slope_and_intercept_MCIB = function(lower_i = lower_i, upper_i = upper_i, n_i = n_i,
+                                             firstBracket_flat = TRUE){
 
         N = sum(n_i)
 
-        alpha_pareto <- getMids(ID = "1",
-                                hb = n_i,
-                                lb = lower_i,
-                                ub = upper_i,
-                                alpha_bound = 2)$alpha
+        #alpha_pareto <- getMids(ID = "1",
+        #                        hb = n_i,
+        #                        lb = lower_i,
+        #                        ub = upper_i,
+        #                        alpha_bound = 2)$alpha
 
-        beta_pareto = last(lower_i)
-        pareto_upper_bound = exp( log(beta_pareto) - log(1 - 0.9995)/alpha_pareto)
+        #beta_pareto = last(lower_i)
+        #pareto_upper_bound = exp( log(beta_pareto) - log(1 - 0.9995)/alpha_pareto)
 
         # Initial values for slope and intercept
-        m_initial = slopes_MCIB(lower_i = lower_i, upper_i = upper_i, n_i = n_i)
+        m_initial = slopes_MCIB(lower_i = lower_i, upper_i = upper_i,
+                                n_i = n_i,
+                                firstBracket_flat = firstBracket_flat)
 
         # A function to check if the estimated slopes produce negative probability densities.
         pdf_MCIB_slopeTest = function(m){
@@ -149,8 +162,8 @@ estimate_slope_and_intercept_MCIB = function(lower_i = lower_i, upper_i = upper_
                                             n_i = n_i,
                                             slopes = m)
 
-                # The values we will use to evaluate the probability densities are at the
-                # edge of each bracket.
+                # The values we will use to evaluate the probability densities at the
+                # edges of each bracket.
                 y_lower = lower_i + .000000000001
                 y_upper = upper_i[-length(upper_i)] - .000000000001
 
@@ -169,18 +182,7 @@ estimate_slope_and_intercept_MCIB = function(lower_i = lower_i, upper_i = upper_
 
                 probDensity_closedBrackets = (m_i*y + c_i)/N
 
-                f_pareto_lastBracket = function(y){
-                        beta_pareto = lower_i[n_brackets]
-                        log_PDF = log(alpha_pareto) + alpha_pareto*log(beta_pareto) - (alpha_pareto+1)*log(y)
-                        exp(log_PDF)
-                }
-
-                probDensity_openBracket = (n_i[n_brackets]/N)*f_pareto_lastBracket(y)
-
-                probDensity = ifelse(i < n_brackets,
-                                     probDensity_closedBrackets,
-                                     probDensity_openBracket)
-
+                probDensity <- probDensity_closedBrackets[!(i == which(is.na(upper_i)))]
                 probDensity = ifelse(y < lower_i[1], 0, probDensity)
 
                 probDensity_test = NA
@@ -227,17 +229,7 @@ estimate_slope_and_intercept_MCIB = function(lower_i = lower_i, upper_i = upper_
 
                 probDensity_closedBrackets = (m_i*y + c_i)/N
 
-                f_pareto_lastBracket = function(y){
-                        beta_pareto = lower_i[n_brackets]
-                        log_PDF = log(alpha_pareto) + alpha_pareto*log(beta_pareto) - (alpha_pareto+1)*log(y)
-                        exp(log_PDF)
-                }
-
-                probDensity_openBracket = (n_i[n_brackets]/N)*f_pareto_lastBracket(y)
-
-                probDensity = ifelse(i < n_brackets,
-                                     probDensity_closedBrackets,
-                                     probDensity_openBracket)
+                probDensity <- probDensity_closedBrackets[!(i == which(is.na(upper_i)))]
 
                 probDensity = ifelse(y < lower_i[1], 0, probDensity)
 
@@ -306,7 +298,6 @@ estimate_slope_and_intercept_MCIB = function(lower_i = lower_i, upper_i = upper_
 
         list(m = m_corrected, c =c)
 }
-
 
 
 check_known_groupMeans_DF <- function(data_pnad, groups = NULL, known_groupMeans = NULL){
@@ -457,6 +448,8 @@ make_PDFpareto_lastBracket = function(data_i, topBracket_method_chosen, known_gr
                         ((m/(3*n_i))*(upper_i^3) + (c/(2*n_i))*(upper_i^2)) - ((m/(3*n_i))*(lower_i^3) + (c/(2*n_i))*(lower_i^2))
                 }
 
+                group_means_by_integral[is.nan(group_means_by_integral)] <- 0
+
                 mean_last_group = (1/last(n_i))*(N*known_groupMean_i - sum(n_i*group_means_by_integral, na.rm = T))
 
                 beta_pareto <- last(lower_i)
@@ -506,6 +499,12 @@ get_pareto_upper_bound = function(data_i,
 
         lower_i = rowMeans(cbind(lower_i,c(NA, upper_i[-length(upper_i)])),na.rm = T)
         upper_i = c(lower_i[-1], NA)
+
+        if(last(n_i) == 0){
+                last_valid <- last(which(n_i > 0))
+                return(upper_i[last_valid])
+        }
+
 
         beta_pareto = last(lower_i)
 

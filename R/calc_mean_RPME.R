@@ -64,7 +64,11 @@ calc_mean_RPME <- function(data_pnad, groups = NULL){
                 dplyr::select(arit_midPoints_aritMean:geom_midPoints_HarMean) %>%
                 names()
 
-        mean_result <- map_df(1:length(pnads_midpoints_byGroups), .f = function(i){
+        if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
+                plan(multiprocess)
+        }
+
+        mean_result <- future_map_dfr(1:length(pnads_midpoints_byGroups), .f = function(i){
 
                 nome <- names(pnads_midpoints_byGroups)[i]
                 data <- pnads_midpoints_byGroups[[i]] %>%

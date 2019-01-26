@@ -1,6 +1,7 @@
 #' @export
 
-calc_gini_MCIB <- function(data_pnad, groups = NULL, known_groupMeans = NULL, topBracket_method = c("gpinter","RPME")){
+calc_gini_MCIB <- function(data_pnad, groups = NULL, known_groupMeans = NULL, topBracket_method = c("gpinter","RPME"),
+                           firstBracket_flat = TRUE){
 
         if(is.null(groups)){
                 data_pnad <- data_pnad %>%
@@ -39,36 +40,39 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL, known_groupMeans = NULL, to
                 lower_i = rowMeans(cbind(lower_i,c(NA, upper_i[-length(upper_i)])),na.rm = T)
                 upper_i = c(lower_i[-1], NA)
 
-                slope_intercept <- tableInequality:::estimate_slope_and_intercept_MCIB(lower_i = lower_i,
-                                                                                       upper_i = upper_i,
-                                                                                       n_i = n_i)
+                slope_intercept <- tableInequality:::estimate_slope_and_intercept_MCIB(
+                        lower_i           = lower_i,
+                        upper_i           = upper_i,
+                        n_i               = n_i,
+                        firstBracket_flat = firstBracket_flat)
+
                 m = slope_intercept$m
                 c = slope_intercept$c
 
-                PDFpareto_lastBracket = tableInequality:::make_PDFpareto_lastBracket(data_i = data_i,
-                                                                                     topBracket_method_chosen = topBracket_method_chosen,
-                                                                                     known_groupMeans_checked = known_groupMeans_checked,
-                                                                                     m = m,
-                                                                                     c = c)
+                PDFpareto_lastBracket =  tableInequality:::make_PDFpareto_lastBracket(data_i = data_i,
+                                                                   topBracket_method_chosen = topBracket_method_chosen,
+                                                                   known_groupMeans_checked = known_groupMeans_checked,
+                                                                   m = m,
+                                                                   c = c)
 
-                CDFpareto_lastBracket = tableInequality:::make_CDFpareto_lastBracket(data_i = data_i,
-                                                                                     topBracket_method_chosen = topBracket_method_chosen,
-                                                                                     known_groupMeans_checked = known_groupMeans_checked,
-                                                                                     m = m,
-                                                                                     c = c)
+                CDFpareto_lastBracket =  tableInequality:::make_CDFpareto_lastBracket(data_i = data_i,
+                                                                   topBracket_method_chosen = topBracket_method_chosen,
+                                                                   known_groupMeans_checked = known_groupMeans_checked,
+                                                                   m = m,
+                                                                   c = c)
 
-                quantileFunctionPareto_lastBracket = tableInequality:::make_quantileFunctionPareto_lastBracket(data_i = data_i,
-                                                                                                               topBracket_method_chosen = topBracket_method_chosen,
-                                                                                                               known_groupMeans_checked = known_groupMeans_checked,
-                                                                                                               m = m,
-                                                                                                               c = c)
+                quantileFunctionPareto_lastBracket =  tableInequality:::make_quantileFunctionPareto_lastBracket(data_i = data_i,
+                                                                                             topBracket_method_chosen = topBracket_method_chosen,
+                                                                                             known_groupMeans_checked = known_groupMeans_checked,
+                                                                                             m = m,
+                                                                                             c = c)
 
 
-                pareto_upper_bound = tableInequality:::get_pareto_upper_bound(data_i = data_i,
-                                                                              topBracket_method_chosen = topBracket_method_chosen,
-                                                                              known_groupMeans_checked = known_groupMeans_checked,
-                                                                              m = m,
-                                                                              c = c)
+                pareto_upper_bound =  tableInequality:::get_pareto_upper_bound(data_i = data_i,
+                                                            topBracket_method_chosen = topBracket_method_chosen,
+                                                            known_groupMeans_checked = known_groupMeans_checked,
+                                                            m = m,
+                                                            c = c)
 
                 pdf_MCIB = function(y){
 
@@ -84,17 +88,19 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL, known_groupMeans = NULL, to
                         c_i = c[i]
 
                         probDensity_closedBrackets <- (m_i*y + c_i)/N
-                        probDensity_openBracket    <- PDFpareto_lastBracket(y)
+
+                        if(!is.null(PDFpareto_lastBracket)){
+                                probDensity_openBracket <- PDFpareto_lastBracket(y)
+                        }else{
+                                probDensity_openBracket <- rep(0, length(y))
+                        }
 
                         probDensity = ifelse(i < n_brackets,
                                              probDensity_closedBrackets,
                                              probDensity_openBracket)
 
-                        probDensity = ifelse(y < lower_i[1], 0, probDensity)
-
-                        if(last(n_i) == 0){
-                                probDensity[y > last(lower_i)] <- 0
-                        }
+                        probDensity = ifelse(y < lower_i[1], NA, probDensity)
+                        probDensity = ifelse(y > pareto_upper_bound, NA, probDensity)
 
                         probDensity
                 }
@@ -122,13 +128,18 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL, known_groupMeans = NULL, to
 
                         prob_cum_closed = cum_p_i + (m_i/(2*N))*(y^2) + (c_i/N)*y - (m_i*(min_i^2))/(2*N) - (c_i/N)*min_i
 
-                        prob_cum_open = CDFpareto_lastBracket(y)
+                        if(!is.null(CDFpareto_lastBracket)){
+                                prob_cum_open = CDFpareto_lastBracket(y)
+                        }else{
+                                prob_cum_open <- rep(1, length(y))
+                        }
 
                         prob_cum = ifelse(i < n_brackets,
                                           prob_cum_closed,
                                           prob_cum_open)
 
-                        prob_cum = ifelse(y < lower_i[1], 0, prob_cum)
+                        prob_cum = ifelse(y < lower_i[1], NA, prob_cum)
+                        prob_cum = ifelse(y > pareto_upper_bound, NA, prob_cum)
 
                         prob_cum
                 }
@@ -173,32 +184,46 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL, known_groupMeans = NULL, to
 
                         # Quantiles for closed brackets with uniform densities
                         y_uniform = (p - quantile_data$cum_p_min[i])*(N/c_i) + min_i
-                        quantile_closedBracket = ifelse(m_i == 0, y_uniform, quantile_closedBracket)
+                        quantile_closedBracket = ifelse(m_i == 0 & c_i >0,
+                                                        y_uniform,
+                                                        quantile_closedBracket)
 
-                        quantile_openBracket = quantileFunctionPareto_lastBracket(p)
+                        if(!is.null(quantileFunctionPareto_lastBracket)){
+                                quantile_openBracket = quantileFunctionPareto_lastBracket(p)
+                        }else{
+                                quantile_openBracket <- rep(NA, length(p))
+                        }
 
                         quantile = ifelse(i < nrow(quantile_data),
                                           quantile_closedBracket,
                                           quantile_openBracket)
 
+                        if(last(n_i) == 0){
+                                last_valid <- last(which(n_i > 0))
+                                quantile[p==1] = upper_i[last_valid]
+                        }
+
                         quantile = ifelse(p < 0 | p > 1, NA, quantile)
 
-                        if(last(n_i) == 0){ # tem erro
-                                quantile[p==1] <- lower_i[length(lower_i)-1]
+                        if(!is.finite(pareto_upper_bound)){
+                                quantile = ifelse(p == 1, NA, quantile)
                         }
 
                         quantile
                 }
 
-
                 if(!is.null(known_groupMeans_checked)){
-
                         grand_mean = known_groupMeans_checked[known_groupMeans_checked$ID == ID_i, ]$mean
 
                 }else{
-                        grand_mean = pracma::integral(function(x) x*pdf_MCIB(x),
-                                                      xmin = first(lower_i),
-                                                      xmax = pareto_upper_bound)
+                        grand_mean = integrate(f = function(y) y*pdf_MCIB(y),
+                                         lower = first(lower_i),
+                                         upper = pareto_upper_bound,
+                                         subdivisions = 2000,
+                                         rel.tol = 1e-10,
+                                         stop.on.error = FALSE)$value
+
+
                 }
 
                 # lorenz value for one observation
@@ -214,9 +239,10 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL, known_groupMeans = NULL, to
                 lorenz_MCIB = Vectorize(lorenz_i)
 
                 p_max = cdf_MCIB(pareto_upper_bound)
+                p_max = ifelse(p_max > (1 - .Machine$double.eps^0.45), 1 - .Machine$double.eps^0.45, p_max)
 
                 # NUMERICAL INTEGRAL - QUADRATURE
-
+                #system.time({
                 # create grid
                 nw = createNIGrid(dim=1, type="nLe", level=25)
 
@@ -226,6 +252,15 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL, known_groupMeans = NULL, to
                 # compute the approximated value of the integral
                 lorenz_integral = quadrature(f = function(x) lorenz_MCIB(quantile_function_MCIB(x)),
                                              grid = nw)
+                #})
+
+                #system.time({
+                #lorenz_integral = integrate(f = function(x) lorenz_MCIB(quantile_function_MCIB(x)),
+                #                  lower = 0,
+                #                  upper = p_max,
+                #                  subdivisions = 2000,
+                #                  stop.on.error = F)$value
+                #})
 
                 gini = 1 - 2*lorenz_integral
 

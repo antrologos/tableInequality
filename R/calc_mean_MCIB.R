@@ -68,7 +68,12 @@ calc_mean_MCIB <- function(data_pnad, groups = NULL, topBracket_method = c("gpin
                         c_i = c[i]
 
                         probDensity_closedBrackets <- (m_i*y + c_i)/N
-                        probDensity_openBracket    <- PDFpareto_lastBracket(y)
+
+                        if(!is.null(PDFpareto_lastBracket)){
+                                probDensity_openBracket <- PDFpareto_lastBracket(y)
+                        }else{
+                                probDensity_openBracket <- rep(0, length(y))
+                        }
 
                         probDensity = ifelse(i < n_brackets,
                                              probDensity_closedBrackets,
@@ -76,20 +81,19 @@ calc_mean_MCIB <- function(data_pnad, groups = NULL, topBracket_method = c("gpin
 
                         probDensity = ifelse(y < lower_i[1], 0, probDensity)
 
-                        if(last(n_i) == 0){
-                                probDensity[y > last(lower_i)] <- 0
-                        }
-
                         probDensity
                 }
 
 
-                nw = createNIGrid(dim=1, type="GLe", level=75)
-                rescale(nw, domain = matrix(c(first(lower_i), pareto_upper_bound), ncol=2))
-
-                mean = quadrature(f = function(y) y*pdf_MCIB(y), grid = nw)
+                mean = integrate(f = function(y) y*pdf_MCIB(y),
+                                    lower = first(lower_i),
+                                    upper = pareto_upper_bound,
+                                    subdivisions = 2000,
+                                    rel.tol = 1e-10,
+                                    stop.on.error = FALSE)$value
 
                 mean
+
         }
 
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){

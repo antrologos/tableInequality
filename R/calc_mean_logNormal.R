@@ -27,7 +27,7 @@ calc_mean_logNormal <- function(data_pnad,
 
                 #       print(i)
 
-                #data_i = data_split[[i]]
+                #data_i = data_split[[700]]
 
                 if(sum(data_i$n) == 0){
                         return(as.numeric(NA))
@@ -55,14 +55,17 @@ calc_mean_logNormal <- function(data_pnad,
                         })
                 }
 
-                parameters <- try( maxLik(logLik = function(x) -likelihood(x),
-                                          start = c(1,1)),
+                parameters <- try( maxLik::maxLik(logLik = function(x) -likelihood(x),
+                                                  start = c(1,1)),
                                    silent = TRUE)
 
                 if("try-error" %in% class(parameters)){
                         parameters <- nlm(f = likelihood, p = c(1,1))
-                }else if(parameters$code == 3){
-                        parameters <- nlm(f = likelihood, p = c(1,1))
+                }else{
+                        if(parameters$code == 3){
+                                parameters <- maxLik::maxLik(logLik = function(x) -likelihood(x),
+                                                             start = c(1,1), method = "BFGS")
+                        }
                 }
 
                 mu     = parameters$estimate[1]
@@ -80,7 +83,11 @@ calc_mean_logNormal <- function(data_pnad,
                 mean
         }
 
-        mean_result <- map_df(data_split, mean_logNormal)
+        if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
+                plan(multiprocess)
+        }
+
+        mean_result <- future_map_dfr(data_split, mean_logNormal, .progress = T)
 
         mean_result <- tibble(ID   = rownames(t(mean_result)),
                               mean = t(mean_result)[,1])

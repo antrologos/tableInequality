@@ -21,15 +21,9 @@ calc_gini_logNormalPareto <- function(data_pnad,
 
         data_split <- split(data_pnad, f = data_pnad$ID)
 
-        data_i = data_split[[1]]
+        #data_i = data_split[[1]]
 
         gini_loglinPareto = function(data_i,  grid_mean){
-
-                #for(i in 1:length(data_split)){
-
-                #       print(i)
-
-                #data_i = data_split[[i]]
 
                 if(sum(data_i$n) == 0){
                         return(as.numeric(NA))
@@ -275,6 +269,7 @@ calc_gini_logNormalPareto <- function(data_pnad,
 
 
                 lower_i = min(data_i$min_faixa)
+
                 # lorenz value for one observation
                 lorenz_i = function(z){
                         nw = createNIGrid(dim=1, type="GLe", level=75)
@@ -291,7 +286,6 @@ calc_gini_logNormalPareto <- function(data_pnad,
                 p_max = ifelse(p_max > (1 - .Machine$double.eps^0.45), 1 - .Machine$double.eps^0.45, p_max)
 
                 # NUMERICAL INTEGRAL - QUADRATURE
-                #system.time({
                 # create grid
                 nw = createNIGrid(dim=1, type="nLe", level=25)
 
@@ -301,15 +295,6 @@ calc_gini_logNormalPareto <- function(data_pnad,
                 # compute the approximated value of the integral
                 lorenz_integral = quadrature(f = function(x) lorenz_combined(quantile_function_combined(x)),
                                              grid = nw)
-                #})
-
-                #system.time({
-                #lorenz_integral = integrate(f = function(x) lorenz_MCIB(quantile_function_MCIB(x)),
-                #                  lower = 0,
-                #                  upper = p_max,
-                #                  subdivisions = 2000,
-                #                  stop.on.error = F)$value
-                #})
 
                 gini = 1 - 2*lorenz_integral
 

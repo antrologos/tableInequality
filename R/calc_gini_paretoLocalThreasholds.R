@@ -1,12 +1,6 @@
 #' @export
 
-data_pnad = c1970_aggreg
-groups    = "municipality2010standard"
-limite_distribuicoes = .85
-
-calc_gini_logNormalPareto <- function(data_pnad,
-                                      groups = NULL,
-                                      limite_distribuicoes = .9){
+calc_gini_paretoLocalThreasholds <- function(data_pnad, groups = NULL){
 
         if(is.null(groups)){
                 data_pnad <- data_pnad %>%
@@ -25,9 +19,9 @@ calc_gini_logNormalPareto <- function(data_pnad,
 
         data_split <- split(data_pnad, f = data_pnad$ID)
 
-        #data_i = data_split[[290]]
+        #data_i = data_split[[1]]
 
-        gini_loglinPareto = function(data_i,  grid_mean){
+        gini_paretoLocal = function(data_i,  grid_mean){
 
                 if(sum(data_i$n) == 0){
                         return(as.numeric(NA))
@@ -42,11 +36,14 @@ calc_gini_logNormalPareto <- function(data_pnad,
                                p_inf = c(0, cumsum(p)[-length(cumsum(p))]),
                                p_sup = cumsum(p))
 
-                max_value <- data_i$max_faixa[first(which(round(data_i$p_sup, 12) == 1))]
+                max_value <- data_i$max_faixa[first(which(data_i$p_sup == 1))]
                 max_value <- ifelse(is.na(max_value), Inf, max_value)
 
                 #===========================================================
                 # Passo 1 - Interpolação de Pareto Local
+
+                #data_ii <- data_i %>%
+                #        filter(n > 0)
 
                 nrows_max <- first(which(round(data_i$p_sup, 15) == 1))
                 data_ii <- data_i[1:nrows_max,] %>%
@@ -76,7 +73,6 @@ calc_gini_logNormalPareto <- function(data_pnad,
                 data_pareto$k[is.na(data_pareto$max_faixa)]     <- data_pareto$min_faixa[is.na(data_pareto$max_faixa)]
 
                 #y = 0:10000
-
 
                 theta_test = data_pareto$theta[is.na(data_pareto$max_faixa)]
                 k_test = data_pareto$k[is.na(data_pareto$max_faixa)]
@@ -154,120 +150,14 @@ calc_gini_logNormalPareto <- function(data_pnad,
                 quantile_pareto_adj = Vectorize(tableInequality:::inverse(cdf_pareto_adj, lower = 0, upper = max_value, extendInt = "yes"))
 
 
-                #===========================================================
-                # PASSO 2 - Interpolação Log-normal
-
-
-                likelihood <- function(logNormalParameters){
-
-                        mu     <- logNormalParameters[1]
-                        sigma2 <- exp(logNormalParameters[2])
-
-                        sigma  <- sqrt(sigma2)
-
-                        with(data_i, {
-                                probs <- pnorm(log_max - mu, sd = sigma) - pnorm(log_min - mu, sd = sigma)
-                                probs[length(probs)] = 1 - pnorm(last(log_min) - mu, sd = sigma)
-
-                                -sum(n*log(probs)) #negativo porque o nlm minimiza
-                        })
-                }
-
-                parameters <- try( maxLik(logLik = function(x) -likelihood(x),
-                                          start = c(1,1)),
-                                   silent = TRUE)
-
-                if("try-error" %in% class(parameters)){
-                        parameters <- nlm(f = likelihood, p = c(1,1))
-                }else{
-                        if(parameters$code == 3){
-                                parameters <- maxLik::maxLik(logLik = function(x) -likelihood(x),
-                                                             start = c(1,1), method = "BFGS")
-                        }
-                }
-
-                mu     = parameters$estimate[1]
-                sigma2 = exp(parameters$estimate[2])
-                sigma4 = sigma2^2
-
-                #correction factor
-                #https://stats.stackexchange.com/questions/221465/why-is-the-arithmetic-mean-smaller-than-the-distribution-mean-in-a-log-normal-di
-                cf = ((exp(sigma2) - 1)/(sigma2 + sigma4/2))
-
-                sigma2_corrected = cf*sigma2
-                sigma  = sqrt(sigma2_corrected)
-
-
-                pdf_lognormal      <- function(y) dlnorm(x = y,meanlog = mu, sdlog = sigma)
-                cdf_lognormal      <- function(y) plnorm(q = y,meanlog = mu, sdlog = sigma)
-                quantile_lognormal <- function(p) qlnorm(p = p,meanlog = mu, sdlog = sigma)
-
-                p_cum_maxValue_lognormal <- cdf_lognormal(max_value)
-
-                pdf_lognormal_adj <- function(y){
-                        density = pdf_lognormal(y)/p_cum_maxValue_lognormal
-                        density = ifelse(y > max_value, 0, density)
-                        density
-                }
-
-                cdf_lognormal_adj <- function(y){
-                        p = cdf_lognormal(y)/p_cum_maxValue_lognormal
-                        p = ifelse(y > max_value, 1, p)
-                        p
-                }
-
-                if(is.finite(max_value)){
-                        quantile_lognormal_adj = Vectorize(tableInequality:::inverse(f = cdf_lognormal_adj,
-                                                                                     lower = 0,
-                                                                                     upper = max_value,
-                                                                                     extendInt = "yes"))
-                }else{
-                        quantile_lognormal_adj = quantile_lognormal
-                }
-
-                #=============================================================================================================
-                # Passo 3 - Combinando distribuições
-
-                #y = seq(0, 10000, 100)
-
-                pdf_combined <- function(y){
-                        threashold        <- quantile_lognormal_adj(limite_distribuicoes)
-                        survival_pareto   <- 1 - cdf_pareto_adj(threashold)
-                        correction_factor <- (1 - limite_distribuicoes)/survival_pareto
-
-                        density <- pdf_lognormal_adj(y)
-                        density[y > threashold] <- pdf_pareto_adj(y[y > threashold]) * correction_factor
-
-                        density
-                }
-
-                #
-                cdf_combined <- function(y){
-                        threashold        <- quantile_lognormal_adj(limite_distribuicoes)
-                        survival_pareto      <- 1 - cdf_pareto_adj(threashold)
-                        survival_logNormal   <- 1 - cdf_lognormal_adj(threashold)
-
-                        correction_factor <- survival_logNormal/survival_pareto
-
-                        p <- cdf_lognormal_adj(y)
-
-                        p[y > threashold] <- limite_distribuicoes + (cdf_pareto_adj(y[y > threashold]) - cdf_pareto_adj(threashold))*correction_factor
-
-                        p
-                }
-
-                quantile_i <- tableInequality:::inverse(f = cdf_combined, lower = 0, upper = max_value, extendInt = "yes")
-                quantile_function_combined = Vectorize(quantile_i)
-
-                #
+                #=====================================================================
 
                 #system.time({
                 grid_meanCopy <- grid_mean
                 rescale(grid_meanCopy, domain = c(0, max_value))
-                grand_mean <- mvQuad::quadrature(f = function(y) y*pdf_combined(y),
-                                           grid = grid_meanCopy)
+                grand_mean <- mvQuad::quadrature(f = function(y) y*pdf_pareto_adj(y),
+                                                 grid = grid_meanCopy)
                 #})
-
 
                 lower_i = min(data_i$min_faixa)
 
@@ -276,14 +166,14 @@ calc_gini_logNormalPareto <- function(data_pnad,
                         nw = createNIGrid(dim=1, type="GLe", level=75)
                         rescale(nw, domain = matrix(c(first(lower_i), z), ncol=2))
 
-                        quadrature(f = function(y) (1/grand_mean)*y*pdf_combined(y),
+                        quadrature(f = function(y) (1/grand_mean)*y*pdf_pareto_adj(y),
                                    grid = nw)
                 }
 
                 # lorenz for a vector
-                lorenz_combined = Vectorize(lorenz_i)
+                lorenz_paretoLocal = Vectorize(lorenz_i)
 
-                p_max = cdf_combined(max_value)
+                p_max = cdf_pareto_adj(max_value)
                 p_max = ifelse(p_max > (1 - .Machine$double.eps^0.45), 1 - .Machine$double.eps^0.45, p_max)
 
                 # NUMERICAL INTEGRAL - QUADRATURE
@@ -294,7 +184,7 @@ calc_gini_logNormalPareto <- function(data_pnad,
                 rescale(nw, domain = matrix(c(0, p_max), ncol=2))
 
                 # compute the approximated value of the integral
-                lorenz_integral = quadrature(f = function(x) lorenz_combined(quantile_function_combined(x)),
+                lorenz_integral = quadrature(f = function(x) lorenz_paretoLocal(quantile_pareto_adj(x)),
                                              grid = nw)
 
                 gini = 1 - 2*lorenz_integral
@@ -308,9 +198,8 @@ calc_gini_logNormalPareto <- function(data_pnad,
         }
 
         grid_mean = mvQuad::createNIGrid(dim = 1, type = "GLe", level = 1500)
-
         gini_result <- future_map_dfr(.x = data_split,
-                                      .f = gini_loglinPareto,
+                                      .f = gini_paretoLocal,
                                       grid_mean = grid_mean,
                                       .progress = T)
 
@@ -329,5 +218,4 @@ calc_gini_logNormalPareto <- function(data_pnad,
         gini_result
 
 }
-
 

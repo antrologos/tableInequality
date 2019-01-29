@@ -1,9 +1,6 @@
 #' @export
 
-
-calc_mean_logNormalPareto <- function(data_pnad,
-                                      groups = NULL,
-                                      limite_distribuicoes = .9){
+calc_mean_paretoLocalThreasholds <- function(data_pnad, groups = NULL){
 
         if(is.null(groups)){
                 data_pnad <- data_pnad %>%
@@ -22,20 +19,9 @@ calc_mean_logNormalPareto <- function(data_pnad,
 
         data_split <- split(data_pnad, f = data_pnad$ID)
 
+        #data_i = data_split[[1]]
 
-        #problems
-        #data_i =  data_split[[ 25 ]]
-        #data_i =  data_split[[2229]]
-
-        #which(names(data_split) == 316590)
-
-        mean_loglinPareto = function(data_i, grid_mean){
-
-                #for(i in 1:length(data_split)){
-
-                #       print(i)
-
-                #data_i = data_split[[i]]
+        mean_paretoLocal = function(data_i,  grid_mean){
 
                 if(sum(data_i$n) == 0){
                         return(as.numeric(NA))
@@ -50,7 +36,7 @@ calc_mean_logNormalPareto <- function(data_pnad,
                                p_inf = c(0, cumsum(p)[-length(cumsum(p))]),
                                p_sup = cumsum(p))
 
-                max_value <- data_i$max_faixa[first(which(round(data_i$p_sup, 12) == 1))]
+                max_value <- data_i$max_faixa[first(which(data_i$p_sup == 1))]
                 max_value <- ifelse(is.na(max_value), Inf, max_value)
 
                 #===========================================================
@@ -79,15 +65,14 @@ calc_mean_logNormalPareto <- function(data_pnad,
                         arrange(min_faixa)
 
                 two_point_theta <- binequality::getMids(ID = "1",
-                                     hb = data_ii$n,
-                                     lb = data_ii$min_faixa,
-                                     ub = data_ii$max_faixa)$alpha
+                                                        hb = data_ii$n,
+                                                        lb = data_ii$min_faixa,
+                                                        ub = data_ii$max_faixa)$alpha
 
                 data_pareto$theta[is.na(data_pareto$max_faixa)] <- two_point_theta
                 data_pareto$k[is.na(data_pareto$max_faixa)]     <- data_pareto$min_faixa[is.na(data_pareto$max_faixa)]
 
-               #y = 0:10000
-
+                #y = 0:10000
 
                 theta_test = data_pareto$theta[is.na(data_pareto$max_faixa)]
                 k_test = data_pareto$k[is.na(data_pareto$max_faixa)]
@@ -165,125 +150,18 @@ calc_mean_logNormalPareto <- function(data_pnad,
                 quantile_pareto_adj = Vectorize(tableInequality:::inverse(cdf_pareto_adj, lower = 0, upper = max_value, extendInt = "yes"))
 
 
-                #===========================================================
-                # PASSO 2 - Interpolação Log-normal
-
-
-                likelihood <- function(logNormalParameters){
-
-                        mu     <- logNormalParameters[1]
-                        sigma2 <- exp(logNormalParameters[2])
-
-                        sigma  <- sqrt(sigma2)
-
-                        with(data_i, {
-                                probs <- pnorm(log_max - mu, sd = sigma) - pnorm(log_min - mu, sd = sigma)
-                                probs[length(probs)] = 1 - pnorm(last(log_min) - mu, sd = sigma)
-
-                                -sum(n*log(probs)) #negativo porque o nlm minimiza
-                        })
-                }
-
-                parameters <- try( maxLik(logLik = function(x) -likelihood(x),
-                                          start = c(1,1)),
-                                   silent = TRUE)
-
-                if("try-error" %in% class(parameters)){
-                        parameters <- nlm(f = likelihood, p = c(1,1))
-                }else{
-                        if(parameters$code == 3){
-                                parameters <- maxLik::maxLik(logLik = function(x) -likelihood(x),
-                                                             start = c(1,1), method = "BFGS")
-                        }
-                }
-
-                mu     = parameters$estimate[1]
-                sigma2 = exp(parameters$estimate[2])
-                sigma4 = sigma2^2
-
-                #correction factor
-                #https://stats.stackexchange.com/questions/221465/why-is-the-arithmetic-mean-smaller-than-the-distribution-mean-in-a-log-normal-di
-                cf = ((exp(sigma2) - 1)/(sigma2 + sigma4/2))
-
-                sigma2_corrected = cf*sigma2
-                sigma  = sqrt(sigma2_corrected)
-
-
-                pdf_lognormal      <- function(y) dlnorm(x = y,meanlog = mu, sdlog = sigma)
-                cdf_lognormal      <- function(y) plnorm(q = y,meanlog = mu, sdlog = sigma)
-                quantile_lognormal <- function(p) qlnorm(p = p,meanlog = mu, sdlog = sigma)
-
-                p_cum_maxValue_lognormal <- cdf_lognormal(max_value)
-
-                pdf_lognormal_adj <- function(y){
-                        density = pdf_lognormal(y)/p_cum_maxValue_lognormal
-                        density = ifelse(y > max_value, 0, density)
-                        density
-                }
-
-                cdf_lognormal_adj <- function(y){
-                        p = cdf_lognormal(y)/p_cum_maxValue_lognormal
-                        p = ifelse(y > max_value, 1, p)
-                        p
-                }
-
-                if(is.finite(max_value)){
-                        quantile_lognormal_adj = Vectorize(tableInequality:::inverse(f = cdf_lognormal_adj,
-                                                                                     lower = 0,
-                                                                                     upper = max_value,
-                                                                                     extendInt = "yes"))
-                }else{
-                        quantile_lognormal_adj = quantile_lognormal
-                }
-
-              #=============================================================================================================
-                # Passo 3 - Combinando distribuições
-
-                #y = seq(0, 10000, 100)
-
-                pdf_combined <- function(y){
-                        threashold        <- quantile_lognormal_adj(limite_distribuicoes)
-                        survival_pareto   <- 1 - cdf_pareto_adj(threashold)
-                        correction_factor <- (1 - limite_distribuicoes)/survival_pareto
-
-                        density <- pdf_lognormal_adj(y)
-                        density[y > threashold] <- pdf_pareto_adj(y[y > threashold]) * correction_factor
-
-                        density
-                }
+                #=====================================================================
 
                 #system.time({
-                #        mean <- integrate(f = function(y) y*pdf_combined(y),
-                #                          lower = 0,
-                #                          upper = max_value,
-                #                          subdivisions = 2000,
-                #                          stop.on.error = F,
-                #                          rel.tol = .Machine$double.eps^.5
-                #                          )$value
+                grid_meanCopy <- grid_mean
+                rescale(grid_meanCopy, domain = c(0, max_value))
+                mean <- mvQuad::quadrature(f = function(y) y*pdf_pareto_adj(y),
+                                                 grid = grid_meanCopy)
                 #})
-
-                #system.time({
-                        grid_meanCopy <- grid_mean
-                        rescale(grid_meanCopy, domain = c(0, max_value))
-                        mean <- mvQuad::quadrature(f = function(y) y*pdf_combined(y),
-                                           grid = grid_meanCopy)
-                #})
-                        #if(str_detect(mean$message, "divergent")){
-                        #        mean <- integral(function(y) y*pdf_combined(y), xmin = 0, xmax = max_value)
-                        #}else{
-                        #        mean <- mean$value
-                        #}
-
 
                 mean
+
         }
-
-        #teste = NULL
-        #for(i in 1:length(data_split)){
-        #        print(i)
-        #        teste[[i]] = mean_loglinPareto(data_split[[i]], grid_mean )
-        #}
-
 
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
                 plan(multiprocess)
@@ -291,9 +169,9 @@ calc_mean_logNormalPareto <- function(data_pnad,
 
         grid_mean = mvQuad::createNIGrid(dim = 1, type = "GLe", level = 1500)
         mean_result <- future_map_dfr(.x = data_split,
-                              .f = mean_loglinPareto,
-                              grid_mean = grid_mean,
-                              .progress = T)
+                                      .f = mean_paretoLocal,
+                                      grid_mean = grid_mean,
+                                      .progress = T)
 
         mean_result <- tibble(ID   = rownames(t(mean_result)),
                               mean = t(mean_result)[,1])
@@ -310,5 +188,4 @@ calc_mean_logNormalPareto <- function(data_pnad,
         mean_result
 
 }
-
 

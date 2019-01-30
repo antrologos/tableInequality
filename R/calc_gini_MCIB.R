@@ -10,8 +10,8 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL, known_groupMeans = NULL, to
         }else{
                 data_pnad <- data_pnad %>%
                         unite(col = ID, groups) %>%
-                        group_by(ID, faixas_renda) %>%
-                        summarise(min_faixa = min(min_faixa),
+                        group_by(ID, min_faixa) %>%
+                        summarise(
                                   max_faixa = max(max_faixa),
                                   n         = sum(n)) %>%
                         ungroup() %>%
@@ -28,7 +28,7 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL, known_groupMeans = NULL, to
 
         #data_i = data_split[[1]]
 
-        gini_MCIB = function(data_i, topBracket_method_chosen, known_groupMeans_checked){
+        gini_MCIB = function(data_i, topBracket_method_chosen, known_groupMeans_checked, grid_mean){
 
                 ID_i = data_i$ID %>% unique()
                 lower_i = data_i$min_faixa
@@ -50,29 +50,29 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL, known_groupMeans = NULL, to
                 c = slope_intercept$c
 
                 PDFpareto_lastBracket =  tableInequality:::make_PDFpareto_lastBracket(data_i = data_i,
-                                                                   topBracket_method_chosen = topBracket_method_chosen,
-                                                                   known_groupMeans_checked = known_groupMeans_checked,
-                                                                   m = m,
-                                                                   c = c)
+                                                                                      topBracket_method_chosen = topBracket_method_chosen,
+                                                                                      known_groupMeans_checked = known_groupMeans_checked,
+                                                                                      m = m,
+                                                                                      c = c)
 
                 CDFpareto_lastBracket =  tableInequality:::make_CDFpareto_lastBracket(data_i = data_i,
-                                                                   topBracket_method_chosen = topBracket_method_chosen,
-                                                                   known_groupMeans_checked = known_groupMeans_checked,
-                                                                   m = m,
-                                                                   c = c)
+                                                                                      topBracket_method_chosen = topBracket_method_chosen,
+                                                                                      known_groupMeans_checked = known_groupMeans_checked,
+                                                                                      m = m,
+                                                                                      c = c)
 
                 quantileFunctionPareto_lastBracket =  tableInequality:::make_quantileFunctionPareto_lastBracket(data_i = data_i,
-                                                                                             topBracket_method_chosen = topBracket_method_chosen,
-                                                                                             known_groupMeans_checked = known_groupMeans_checked,
-                                                                                             m = m,
-                                                                                             c = c)
+                                                                                                                topBracket_method_chosen = topBracket_method_chosen,
+                                                                                                                known_groupMeans_checked = known_groupMeans_checked,
+                                                                                                                m = m,
+                                                                                                                c = c)
 
 
                 pareto_upper_bound =  tableInequality:::get_pareto_upper_bound(data_i = data_i,
-                                                            topBracket_method_chosen = topBracket_method_chosen,
-                                                            known_groupMeans_checked = known_groupMeans_checked,
-                                                            m = m,
-                                                            c = c)
+                                                                               topBracket_method_chosen = topBracket_method_chosen,
+                                                                               known_groupMeans_checked = known_groupMeans_checked,
+                                                                               m = m,
+                                                                               c = c)
 
                 pdf_MCIB = function(y){
 
@@ -216,13 +216,24 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL, known_groupMeans = NULL, to
                         grand_mean = known_groupMeans_checked[known_groupMeans_checked$ID == ID_i, ]$mean
 
                 }else{
-                        grand_mean = integrate(f = function(y) y*pdf_MCIB(y),
-                                         lower = first(lower_i),
-                                         upper = pareto_upper_bound,
-                                         subdivisions = 2000,
-                                         rel.tol = 1e-10,
-                                         stop.on.error = FALSE)$value
+                        #grand_mean = integrate(f = function(y) y*pdf_MCIB(y),
+                        #                 lower = first(lower_i),
+                        #                 upper = pareto_upper_bound,
+                        #                 subdivisions = 2000,
+                        #                 rel.tol = 1e-10,
+                        #                 stop.on.error = FALSE)$value
 
+                        grid_meanCopy <- grid_mean
+
+                        if(!is.finite(pareto_upper_bound)){
+                                upper_bound = quantileFunctionPareto_lastBracket(1 - .Machine$double.eps^.45)
+                        }else{
+                                upper_bound = pareto_upper_bound
+                        }
+
+                        rescale(grid_meanCopy, domain = c(first(lower_i), upper_bound))
+                        grand_mean <- mvQuad::quadrature(f = function(y) y*pdf_MCIB(y),
+                                                         grid = grid_meanCopy)
 
                 }
 
@@ -271,13 +282,30 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL, known_groupMeans = NULL, to
                 plan(multiprocess)
         }
 
+
+        grid_mean = mvQuad::createNIGrid(dim = 1, type = "GLe", level = 10000)
+
+
+        #teste = NULL
+        #for(k in 1:length(data_split)){
+        #        print(k)
+        #        teste[k] <-  gini_MCIB(data_split[[k]],
+        #                               topBracket_method_chosen = topBracket_method_chosen,
+        #                               known_groupMeans_checked = known_groupMeans_checked,
+        #                               grid_mean                = grid_mean)
+        #}
+
         gini_result <- future_map_dbl(.x = data_split,
                                       .f = gini_MCIB,
                                       .progress = T,
                                       topBracket_method_chosen = topBracket_method_chosen,
                                       known_groupMeans_checked = known_groupMeans_checked,
+                                      grid_mean                = grid_mean,
+                                      #firstBracket_flat        = firstBracket_flat,
                                       .options = future_options(globals = c("known_groupMeans_checked",
-                                                                            "topBracket_method_chosen"),
+                                                                            "topBracket_method_chosen",
+                                                                            "firstBracket_flat",
+                                                                            "grid_mean"),
                                                                 packages = c("tableInequality", "data.table"))) %>%
                 tibble(ID = names(.), gini = .)
 

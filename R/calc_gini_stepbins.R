@@ -9,8 +9,8 @@ calc_gini_stepbins <- function(data_pnad, groups = NULL){
         }else{
                 data_pnad <- data_pnad %>%
                         unite(col = ID, groups) %>%
-                        group_by(ID, faixas_renda) %>%
-                        summarise(min_faixa = min(min_faixa),
+                        group_by(ID, min_faixa) %>%
+                        summarise(
                                   max_faixa = max(max_faixa),
                                   n         = sum(n)) %>%
                         ungroup() %>%

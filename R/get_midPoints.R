@@ -1,16 +1,20 @@
 #' @export
 
-calc_mean_RPME <- function(data_pnad, groups = NULL){
-
-        data_pnad <- data_pnad %>%
-                unite(col = ID, groups) %>%
-                group_by(ID, min_faixa) %>%
-                summarise(
-                          max_faixa = max(max_faixa),
-                          n         = sum(n)) %>%
-                ungroup() %>%
-                arrange(ID, min_faixa)
-
+get_midPoints <- function(data_pnad, groups = NULL){
+        if(is.null(groups)){
+                data_pnad <- data_pnad %>%
+                        mutate(ID = 1) %>%
+                        arrange(ID, min_faixa)
+        }else{
+                data_pnad <- data_pnad %>%
+                        unite(col = ID, groups) %>%
+                        group_by(ID, min_faixa) %>%
+                        summarise(
+                                  max_faixa = max(max_faixa),
+                                  n         = sum(n)) %>%
+                        ungroup() %>%
+                        arrange(ID, min_faixa)
+        }
 
         bin_mids_unbound <- with(data_pnad, {
                 getMids(ID = ID,
@@ -23,6 +27,8 @@ calc_mean_RPME <- function(data_pnad, groups = NULL){
         colMax <- function(...){
                 apply(cbind(...), 1, max, na.rm=T)
         }
+
+        data_pnad <- data_pnad %>% mutate(ID = as.character(ID))
 
         midPoints_highestBin <- data_pnad %>%
                 ungroup() %>%
@@ -58,51 +64,15 @@ calc_mean_RPME <- function(data_pnad, groups = NULL){
                 ) %>%
                 dplyr::select(ID, n, arit_midPoints_aritMean:geom_midPoints_HarMean)
 
-        pnads_midpoints_byGroups <- split(pnads_midpoints, pnads_midpoints$ID)
-
-        var_names <- pnads_midpoints_byGroups[[1]] %>%
-                dplyr::select(arit_midPoints_aritMean:geom_midPoints_HarMean) %>%
-                names()
-
-        if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
-                plan(multiprocess)
-        }
-
-        mean_result <- future_map_dfr(1:length(pnads_midpoints_byGroups), .f = function(i){
-
-                nome <- names(pnads_midpoints_byGroups)[i]
-                data <- pnads_midpoints_byGroups[[i]] %>%
-                        filter(n > 0)
-
-                if(nrow(data) > 1){
-                        map(var_names, .f = function(var){
-                                sum(data[[var]]*(data$n/sum(data$n)))
-                        }) %>%
-                                setNames(var_names) %>%
-                                as_tibble() %>%
-                                mutate(ID = nome)
-                }else{
-                        matrix(as.numeric(NA), nrow = 1, ncol = 8) %>%
-                                as_tibble() %>%
-                                setNames(var_names)%>%
-                                mutate(ID = nome)
-                }
-        })
-
+        pnads_midpoints <- bind_cols(pnads_midpoints,
+                                     data_pnad %>% dplyr::select(min_faixa, max_faixa))
 
         if(is.null(groups)){
-                mean_result <- mean_result %>%
-                        gather(key = `Tipo de Média`,
-                               value = "mean",
-                               arit_midPoints_aritMean:geom_midPoints_HarMean)
-
+                pnads_midpoints
         }else{
-                mean_result <- mean_result %>%
-                        separate(col = ID, into = groups, sep = "_") %>%
-                        gather(key = `Tipo de Média`,
-                               value = "mean",
-                               arit_midPoints_aritMean:geom_midPoints_HarMean)
+                pnads_midpoints %>%
+                        separate(col = ID, into = groups, sep = "_")
         }
-
-        mean_result
 }
+
+

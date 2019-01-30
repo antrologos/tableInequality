@@ -118,8 +118,8 @@ slopes_MCIB = function(lower_i, upper_i, n_i, firstBracket_flat = TRUE){
                 m[1] = 0
         }
 
-        m[n_i == 0] = 0
         m[is.na(upper_i)] <- NA
+        m[n_i == 0] = 0
 
         m
 }
@@ -128,8 +128,8 @@ intercepts_MCIB = function(lower_i, upper_i, n_i, slopes){
         # Intercepts
         c = n_i/(upper_i - lower_i) - slopes*((upper_i + lower_i)/2)
 
-        c[n_i == 0] <- 0
         c[is.na(upper_i)] <- NA
+        c[n_i == 0] <- 0
 
         c
 }
@@ -358,11 +358,16 @@ make_pdf_gpinter <- function(data_i, known_groupMeans_checked){
         ID_i = data_i$ID %>% unique()
         p    = data_i$n/sum(data_i$n)
 
-        prob_quantis <- tibble(p_cum = c(0, cumsum(p[-length(p)])),
+        prob_quantis <- tibble(p = p,
+                               p_cum = c(0, cumsum(p[-length(p)])),
                                q     =  data_i$min_faixa)
 
         prob_quantis <- prob_quantis %>%
-                dplyr::filter(p_cum < 1)
+                filter(!(p == 0 & round(p_cum, 12) != 1))
+
+        prob_quantis <- prob_quantis %>%
+                dplyr::filter(round(p_cum, 12) < 1)
+
         min_p <- last(which(prob_quantis$p_cum == 0))
         prob_quantis <- prob_quantis[min_p:nrow(prob_quantis),]
 
@@ -400,6 +405,13 @@ make_PDFpareto_lastBracket = function(data_i, topBracket_method_chosen, known_gr
         lower_i = data_i$min_faixa
         upper_i = data_i$max_faixa
         n_i     = data_i$n
+
+
+        if(last(n_i) == 0){
+
+                return( function(y) 0 )
+
+        }
 
         N = sum(n_i)
 
@@ -568,11 +580,17 @@ make_cdf_gpinter <- function(data_i, known_groupMeans_checked){
         ID_i = data_i$ID %>% unique()
         p    = data_i$n/sum(data_i$n)
 
-        prob_quantis <- tibble(p_cum = c(0, cumsum(p[-length(p)])),
+        prob_quantis <- tibble(p = p,
+                               p_cum = c(0, cumsum(p[-length(p)])),
                                q     =  data_i$min_faixa)
 
         prob_quantis <- prob_quantis %>%
-                dplyr::filter(p_cum < 1)
+                filter(!(p == 0 & round(p_cum, 12) != 1))
+
+        prob_quantis <- prob_quantis %>%
+                dplyr::filter(round(p_cum, 12) < 1)
+
+
         min_p <- last(which(prob_quantis$p_cum == 0))
         prob_quantis <- prob_quantis[min_p:nrow(prob_quantis),]
 
@@ -608,6 +626,13 @@ make_CDFpareto_lastBracket = function(data_i, topBracket_method_chosen, known_gr
         lower_i = data_i$min_faixa
         upper_i = data_i$max_faixa
         n_i     = data_i$n
+
+
+        if(last(n_i) == 0){
+
+                return( function(y) 1 )
+
+        }
 
         N = sum(n_i)
 
@@ -693,11 +718,17 @@ make_quantileFunction_gpinter <- function(data_i, known_groupMeans_checked){
         ID_i = data_i$ID %>% unique()
         p    = data_i$n/sum(data_i$n)
 
-        prob_quantis <- tibble(p_cum = c(0, cumsum(p[-length(p)])),
+        prob_quantis <- tibble(p = p,
+                               p_cum = c(0, cumsum(p[-length(p)])),
                                q     =  data_i$min_faixa)
 
         prob_quantis <- prob_quantis %>%
-                dplyr::filter(p_cum < 1)
+                filter(!(p == 0 & round(p_cum, 12) != 1))
+
+        prob_quantis <- prob_quantis %>%
+                dplyr::filter(round(p_cum, 12) < 1)
+
+
         min_p <- last(which(prob_quantis$p_cum == 0))
         prob_quantis <- prob_quantis[min_p:nrow(prob_quantis),]
 
@@ -735,6 +766,10 @@ make_quantileFunctionPareto_lastBracket = function(data_i, topBracket_method_cho
         n_i     = data_i$n
 
         N = sum(n_i)
+
+        if(last(n_i) == 0){
+                return( function(y) NA)
+        }
 
         lower_i = rowMeans(cbind(lower_i,c(NA, upper_i[-length(upper_i)])),na.rm = T)
         upper_i = c(lower_i[-1], NA)

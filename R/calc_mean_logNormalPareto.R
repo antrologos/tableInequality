@@ -12,8 +12,8 @@ calc_mean_logNormalPareto <- function(data_pnad,
         }else{
                 data_pnad <- data_pnad %>%
                         unite(col = ID, groups) %>%
-                        group_by(ID, faixas_renda) %>%
-                        summarise(min_faixa = min(min_faixa),
+                        group_by(ID, min_faixa) %>%
+                        summarise(
                                   max_faixa = max(max_faixa),
                                   n         = sum(n)) %>%
                         ungroup() %>%
@@ -289,7 +289,7 @@ calc_mean_logNormalPareto <- function(data_pnad,
                 plan(multiprocess)
         }
 
-        grid_mean = mvQuad::createNIGrid(dim = 1, type = "GLe", level = 1500)
+        grid_mean = mvQuad::createNIGrid(dim = 1, type = "GLe", level = 2000)
         mean_result <- future_map_dfr(.x = data_split,
                               .f = mean_loglinPareto,
                               grid_mean = grid_mean,

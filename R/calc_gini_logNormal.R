@@ -10,8 +10,8 @@ calc_gini_logNormal <- function(data_pnad,
         }else{
                 data_pnad <- data_pnad %>%
                         unite(col = ID, groups) %>%
-                        group_by(ID, faixas_renda) %>%
-                        summarise(min_faixa = min(min_faixa),
+                        group_by(ID, min_faixa) %>%
+                        summarise(
                                   max_faixa = max(max_faixa),
                                   n         = sum(n)) %>%
                         ungroup() %>%

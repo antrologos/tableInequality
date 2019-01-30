@@ -9,8 +9,8 @@ calc_mean_paretoLocalThreasholds <- function(data_pnad, groups = NULL){
         }else{
                 data_pnad <- data_pnad %>%
                         unite(col = ID, groups) %>%
-                        group_by(ID, faixas_renda) %>%
-                        summarise(min_faixa = min(min_faixa),
+                        group_by(ID, min_faixa) %>%
+                        summarise(
                                   max_faixa = max(max_faixa),
                                   n         = sum(n)) %>%
                         ungroup() %>%
@@ -36,7 +36,7 @@ calc_mean_paretoLocalThreasholds <- function(data_pnad, groups = NULL){
                                p_inf = c(0, cumsum(p)[-length(cumsum(p))]),
                                p_sup = cumsum(p))
 
-                max_value <- data_i$max_faixa[first(which(data_i$p_sup == 1))]
+                max_value <- data_i$max_faixa[first(which(round(data_i$p_sup, 12) == 1))]
                 max_value <- ifelse(is.na(max_value), Inf, max_value)
 
                 #===========================================================
@@ -167,7 +167,7 @@ calc_mean_paretoLocalThreasholds <- function(data_pnad, groups = NULL){
                 plan(multiprocess)
         }
 
-        grid_mean = mvQuad::createNIGrid(dim = 1, type = "GLe", level = 1500)
+        grid_mean = mvQuad::createNIGrid(dim = 1, type = "GLe", level = 2000)
         mean_result <- future_map_dfr(.x = data_split,
                                       .f = mean_paretoLocal,
                                       grid_mean = grid_mean,

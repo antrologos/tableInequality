@@ -1,7 +1,6 @@
 #' @export
 
-
-verify_distributionProfile <- function(data_pnad, groups){
+verify_distributionProfile <- function(data_pnad, groups = NULL){
 
         data_pnad <- data_pnad %>%
                 unite(col = ID, groups) %>%
@@ -40,15 +39,15 @@ verify_distributionProfile <- function(data_pnad, groups){
 
         verification_step2 <-
                 verification_step1 %>%
-                mutate(distributionProfile = "q. well distributed",
-                       distributionProfile = ifelse(perc50_or_more_1st_2nd_e_3rd_brackets, "p. 50%+ - 3rd bracket", distributionProfile),
-                       distributionProfile = ifelse(perc60_or_more_1st_2nd_e_3rd_brackets, "o. 60%+ - 3rd bracket", distributionProfile),
-                       distributionProfile = ifelse(perc70_or_more_1st_2nd_e_3rd_brackets, "n. 70%+ - 3rd bracket", distributionProfile),
-                       distributionProfile = ifelse(perc80_or_more_1st_2nd_e_3rd_brackets, "m. 80%+ - 3rd bracket", distributionProfile),
-                       distributionProfile = ifelse(perc90_or_more_1st_2nd_e_3rd_brackets, "l. 90%+ - 3rd bracket", distributionProfile),
+                mutate(distributionProfile = "p. well distributed",
+                       distributionProfile = ifelse(perc50_or_more_1st_2nd_e_3rd_brackets, "o. 50%+ - 3rd bracket", distributionProfile),
+                       distributionProfile = ifelse(perc60_or_more_1st_2nd_e_3rd_brackets, "n. 60%+ - 3rd bracket", distributionProfile),
+                       distributionProfile = ifelse(perc70_or_more_1st_2nd_e_3rd_brackets, "m. 70%+ - 3rd bracket", distributionProfile),
+                       distributionProfile = ifelse(perc80_or_more_1st_2nd_e_3rd_brackets, "l. 80%+ - 3rd bracket", distributionProfile),
+                       distributionProfile = ifelse(perc90_or_more_1st_2nd_e_3rd_brackets, "k. 90%+ - 3rd bracket", distributionProfile),
 
-                       distributionProfile = ifelse(perc50_or_more_1st_e_2nd_brackets,    "k. 50%+ - 2nd bracket", distributionProfile),
-                       distributionProfile = ifelse(perc60_or_more_1st_e_2nd_brackets,    "j. 60%+ - 2nd bracket", distributionProfile),
+                       distributionProfile = ifelse(perc50_or_more_1st_e_2nd_brackets,    "j. 50%+ - 2nd bracket", distributionProfile),
+                       distributionProfile = ifelse(perc60_or_more_1st_e_2nd_brackets,    "i. 60%+ - 2nd bracket", distributionProfile),
                        distributionProfile = ifelse(perc70_or_more_1st_e_2nd_brackets,    "h. 70%+ - 2nd bracket", distributionProfile),
                        distributionProfile = ifelse(perc80_or_more_1st_e_2nd_brackets,    "g. 80%+ - 2nd bracket", distributionProfile),
                        distributionProfile = ifelse(perc90_or_more_1st_e_2nd_brackets,    "f. 90%+ - 2nd bracket", distributionProfile),
@@ -62,7 +61,6 @@ verify_distributionProfile <- function(data_pnad, groups){
         verification_step3 <- verification_step2 %>%
                 dplyr::select(ID, distributionProfile)
 
-
         if(is.null(groups)){
                 verification_step3
 
@@ -72,5 +70,3 @@ verify_distributionProfile <- function(data_pnad, groups){
 
         }
 }
-
-

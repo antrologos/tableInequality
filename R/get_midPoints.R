@@ -1,6 +1,7 @@
 #' @export
 
 get_midPoints <- function(data_pnad, groups = NULL){
+
         if(is.null(groups)){
                 data_pnad <- data_pnad %>%
                         mutate(ID = 1) %>%
@@ -52,17 +53,17 @@ get_midPoints <- function(data_pnad, groups = NULL){
                 mutate(arit_midPoints = (min_faixa + max_faixa)/2,
                        geom_midPoints = (min_faixa*max_faixa)^(1/2),
 
-                       arit_midPoints_aritMean = ifelse(is.na(arit_midPoints), aritMean, arit_midPoints),
-                       arit_midPoints_median   = ifelse(is.na(arit_midPoints), median,   arit_midPoints),
-                       arit_midPoints_geoMean  = ifelse(is.na(arit_midPoints), geoMean,  arit_midPoints),
-                       arit_midPoints_HarMean  = ifelse(is.na(arit_midPoints), HarMean,  arit_midPoints),
+                       midArit_topArit   = ifelse(is.na(arit_midPoints), aritMean, arit_midPoints),
+                       midArit_topMedian = ifelse(is.na(arit_midPoints), median,   arit_midPoints),
+                       midArit_topGeom   = ifelse(is.na(arit_midPoints), geoMean,  arit_midPoints),
+                       midArit_topHarm   = ifelse(is.na(arit_midPoints), HarMean,  arit_midPoints),
 
-                       geom_midPoints_aritMean = ifelse(is.na(geom_midPoints), aritMean, geom_midPoints),
-                       geom_midPoints_median   = ifelse(is.na(geom_midPoints), median,   geom_midPoints),
-                       geom_midPoints_geoMean  = ifelse(is.na(geom_midPoints), geoMean,  geom_midPoints),
-                       geom_midPoints_HarMean  = ifelse(is.na(geom_midPoints), HarMean,  geom_midPoints)
+                       midGeom_topArit   = ifelse(is.na(geom_midPoints), aritMean, geom_midPoints),
+                       midGeom_topMedian = ifelse(is.na(geom_midPoints), median,   geom_midPoints),
+                       midGeom_topGeom   = ifelse(is.na(geom_midPoints), geoMean,  geom_midPoints),
+                       midGeom_topHarm   = ifelse(is.na(geom_midPoints), HarMean,  geom_midPoints)
                 ) %>%
-                dplyr::select(ID, n, arit_midPoints_aritMean:geom_midPoints_HarMean)
+                dplyr::select(ID, n, midArit_topArit:midGeom_topHarm)
 
         pnads_midpoints <- bind_cols(pnads_midpoints,
                                      data_pnad %>% dplyr::select(min_faixa, max_faixa))

@@ -4,13 +4,8 @@ model_ordProbit_defCutsHomoskedastic <- function(formula,
                             data_pnad,
                             groups = NULL){
 
-        dep   = as.character(formula[[2]])
-        indep = formula[[3]] %>%
-                as.character() %>%
-                str_split(" ") %>%
-                unlist() %>%
-                str_replace_all("[+]", "") %>%
-                .[nchar(.)>=1]
+        dep   = all.vars(formula[[2]])
+        indep = all.vars(formula[[3]])
 
         if(any(indep %in% groups) | any(groups %in% indep)){
                 stop("Group variables cannot be used as independent variables in the model")
@@ -25,8 +20,7 @@ model_ordProbit_defCutsHomoskedastic <- function(formula,
                         data_pnad %>%
                         unite(col = ID, groups) %>%
                         group_by_at(c("ID",dep,indep)) %>%
-                        summarise(min_faixa = min(min_faixa),
-                                  max_faixa = max(max_faixa),
+                        summarise(max_faixa = max(max_faixa),
                                   n         = sum(n)) %>%
                         ungroup() %>%
                         arrange(ID, min_faixa)
@@ -41,6 +35,8 @@ model_ordProbit_defCutsHomoskedastic <- function(formula,
                 if(sum(data_i$n) == 0){
                         return(as.numeric(NA))
                 }
+
+                ID_i = data_i$ID %>% unique()
 
                 # PASSO 1 -
                 data_i <- data_i %>%
@@ -107,8 +103,14 @@ model_ordProbit_defCutsHomoskedastic <- function(formula,
                 sigma2 = exp(parameters$estimate[(ncol(X)+1):length(parameters$estimate)])
 
                 Hessian = pracma::hessian(likelihood, x0 = parameters$estimate)
-                varCov = solve(-Hessian)
-                sd = sqrt(diag(varCov))[1:ncol(X)] # the last value is "sigma" (the lonormal dispersion parameter)
+
+                varCov = try(solve(-Hessian), silent = T)
+                if("try-error" %in% class(varCov)){
+                        beta = sd = rep(NA, ncol(X))
+
+                }else{
+                        sd = sqrt(diag(varCov))[1:ncol(X)] # the last value is "sigma" (the lonormal dispersion parameter)
+                }
 
                 names(beta) = colnames(X)
                 names(sd) = paste0("sdError_",colnames(X))
@@ -116,6 +118,7 @@ model_ordProbit_defCutsHomoskedastic <- function(formula,
                 results = as_tibble(matrix(c(beta,sd, sigma2), nrow = 1))
                 names(results) = c(colnames(X), paste0("sdError_",colnames(X)), "sigma2")
 
+                results = bind_cols(tibble(ID = ID_i), results)
                 results
         }
 
@@ -131,22 +134,14 @@ model_ordProbit_defCutsHomoskedastic <- function(formula,
 
         regression_result <- future_map_dfr(data_split, reg_loglin, .progress = T)
 
-        ID <- data_pnad %>%
-                .$ID %>%
-                unique()
 
-        regression_result <- bind_cols(tibble(ID = ID) %>%
-                                               separate(col = ID, into = groups, sep =  "_"),
-                                       regression_result)
-
-        #if(is.null(groups)){
-        #        gini_result <- gini_result %>%
-        #                dplyr::select(gini)
-        #}else{
-         #       gini_result <- gini_result %>%
-         #               dplyr::select(ID, gini) %>%
-         #               separate(col = ID, into = groups, sep = "_")
-        #}
+        if(is.null(groups)){
+                regression_result <- regression_result %>%
+                        dplyr::select(-ID)
+        }else{
+                regression_result <- regression_result %>%
+                        separate(col = ID, into = groups, sep =  "_")
+        }
 
         regression_result
 }

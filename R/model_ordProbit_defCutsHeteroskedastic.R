@@ -4,13 +4,8 @@ model_ordProbit_defCutsHeteroskedastic <- function(formula,
                                                    data_pnad,
                                                    groups = NULL){
 
-        dep   = as.character(formula[[2]])
-        indep = formula[[3]] %>%
-                as.character() %>%
-                str_split(" ") %>%
-                unlist() %>%
-                str_replace_all("[+]", "") %>%
-                .[nchar(.)>=1]
+        dep   = all.vars(formula[[2]])
+        indep = all.vars(formula[[3]])
 
         if(any(indep %in% groups) | any(groups %in% indep)){
                 stop("Group variables cannot be used as independent variables in the model")
@@ -25,8 +20,7 @@ model_ordProbit_defCutsHeteroskedastic <- function(formula,
                         data_pnad %>%
                         unite(col = ID, groups) %>%
                         group_by_at(c("ID",dep,indep)) %>%
-                        summarise(min_faixa = min(min_faixa),
-                                  max_faixa = max(max_faixa),
+                        summarise(max_faixa = max(max_faixa),
                                   n         = sum(n)) %>%
                         ungroup() %>%
                         arrange(ID, min_faixa)
@@ -34,13 +28,15 @@ model_ordProbit_defCutsHeteroskedastic <- function(formula,
 
         data_split <- split(data_pnad, f = data_pnad$ID)
 
-        #data_i = data_split[[2]]
+        #data_i = data_split[[72]]
 
         reg_loglin = function(data_i){
 
                 if(sum(data_i$n) == 0){
                         return(as.numeric(NA))
                 }
+
+                ID_i = data_i$ID %>% unique()
 
                 # PASSO 1 -
                 data_i <- data_i %>%
@@ -63,7 +59,6 @@ model_ordProbit_defCutsHeteroskedastic <- function(formula,
                 w = data_i$n
                 log_min = data_i$log_min
                 log_max = data_i$log_max
-
 
                 #beta   = rep(1, ncol(X))
                 #lambda = rep(1, ncol(X))
@@ -111,11 +106,17 @@ model_ordProbit_defCutsHeteroskedastic <- function(formula,
                 lambda = parameters$estimate[(ncol(X)+1):length(parameters$estimate)]
 
                 Hessian = pracma::hessian(likelihood, x0 = parameters$estimate)
-                varCov = solve(-Hessian)
-                sd = sqrt(diag(varCov))
 
-                sd_beta   = sd[1:ncol(X)]
-                sd_lambda = sd[(ncol(X)+1):length(parameters$estimate)]
+                varCov = try(solve(-Hessian), silent = T)
+                if("try-error" %in% class(varCov)){
+                        beta = lambda = sd_beta = sd_lambda = rep(NA, ncol(X))
+
+                }else{
+                        sd = sqrt(diag(varCov))
+
+                        sd_beta   = sd[1:ncol(X)]
+                        sd_lambda = sd[(ncol(X)+1):length(parameters$estimate)]
+                }
 
                 names(beta)   = paste0("beta_", colnames(X))
                 names(lambda) = paste0("lambda_",colnames(X))
@@ -125,37 +126,31 @@ model_ordProbit_defCutsHeteroskedastic <- function(formula,
                 results = as_tibble(matrix(c(beta,lambda, sd_beta, sd_lambda), nrow = 1))
                 names(results) = c(names(beta), names(lambda), names(sd_beta), names(sd_lambda))
 
+                results = bind_cols(tibble(ID = ID_i), results)
                 results
         }
 
-        plan(multiprocess)
+        if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
+                plan(multiprocess)
+        }
 
         #parameters = list()
         #for(i in 1:length(data_split)){
-        #print(i)
-        #parameters[[i]] = reg_loglin(data_i = data_split[[i]])
+        #        print(i)
+        #        parameters[[i]] = reg_loglin(data_i = data_split[[i]])
         #}
-        #
+
         #regression_result <- do.call(what = bind_rows, parameters)
 
         regression_result <- future_map_dfr(data_split, reg_loglin, .progress = T)
 
-        ID <- data_pnad %>%
-                .$ID %>%
-                unique()
-
-        regression_result <- bind_cols(tibble(ID = ID) %>%
-                                               separate(col = ID, into = groups, sep =  "_"),
-                                       regression_result)
-
-        #if(is.null(groups)){
-        #        gini_result <- gini_result %>%
-        #                dplyr::select(gini)
-        #}else{
-        #       gini_result <- gini_result %>%
-        #               dplyr::select(ID, gini) %>%
-        #               separate(col = ID, into = groups, sep = "_")
-        #}
+        if(is.null(groups)){
+                regression_result <- regression_result %>%
+                        dplyr::select(-ID)
+        }else{
+                regression_result <- regression_result %>%
+                        separate(col = ID, into = groups, sep =  "_")
+        }
 
         regression_result
 }

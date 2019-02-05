@@ -1,11 +1,14 @@
 #' @export
 
+#data_pnad = c1970_aggreg
+#groups = c("municipalityCurrent", "male", "educationAttainment_aggreg")
+
 get_midPoints <- function(data_pnad, groups = NULL){
 
         if(is.null(groups)){
                 data_pnad <- data_pnad %>%
                         mutate(ID = 1) %>%
-                        arrange(ID, min_faixa)
+                        arrange_at(ID, min_faixa)
         }else{
                 data_pnad <- data_pnad %>%
                         unite(col = ID, groups) %>%
@@ -17,13 +20,39 @@ get_midPoints <- function(data_pnad, groups = NULL){
                         arrange(ID, min_faixa)
         }
 
-        bin_mids_unbound <- with(data_pnad, {
-                getMids(ID = ID,
-                        hb = n,
-                        lb = min_faixa,
-                        ub = max_faixa,
-                        alpha_bound = numeric(0))
-        })
+        data_split = split(data_pnad, data_pnad$ID)
+        IDs = names(data_split)
+
+        #data_i = data_split[[1]]
+        get_alpha = function(data_i){
+
+                calc_alpha <- try(
+                        getMids(ID = data_i$ID,
+                                hb = data_i$n,
+                                lb = data_i$min_faixa,
+                                ub = data_i$max_faixa,
+                                alpha_bound = numeric(0))$alpha,
+                        silent = T)
+
+                alpha = ifelse("try-error" %in% class(calc_alpha),
+                               NA,
+                               as.numeric(calc_alpha))
+
+                tibble(ID = unique(data_i$ID), alpha)
+        }
+
+        if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
+                plan(multiprocess)
+        }
+
+        data_alpha <- future_map_dfr(.x = data_split, .f = get_alpha, .progress = T)
+
+
+        #for(i in 1:length(data_split)){
+        #        print(i)
+        #        get_alpha(data_split[[i]])
+        #}
+
 
         colMax <- function(...){
                 apply(cbind(...), 1, max, na.rm=T)
@@ -37,7 +66,7 @@ get_midPoints <- function(data_pnad, groups = NULL){
                 dplyr::select(ID, min_faixa) %>%
                 rename(lowerbound = min_faixa) %>%
                 left_join(y = tibble(ID              = data_pnad$ID %>% unique() %>% as.character(), #bin_mids_unbound$mids$ID %>% unique() %>% as.character(),
-                                     alpha           = bin_mids_unbound$alpha,
+                                     alpha           = data_alpha$alpha,
                                      alpha_bounded_1 = colMax(1,alpha),
                                      alpha_bounded_2 = colMax(2,alpha)),
                           by = "ID") %>%
@@ -69,6 +98,7 @@ get_midPoints <- function(data_pnad, groups = NULL){
                                      data_pnad %>% dplyr::select(min_faixa, max_faixa))
 
         if(is.null(groups)){
+                pnads_midpoints$ID = NULL
                 pnads_midpoints
         }else{
                 pnads_midpoints %>%

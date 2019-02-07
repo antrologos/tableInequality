@@ -840,3 +840,54 @@ make_quantileFunctionPareto_lastBracket = function(data_i, topBracket_method_cho
 
         f_pareto_lastBracket
 }
+
+
+prepare_to_regression <- function(data_pnad, indep){
+
+        original_classes <- sapply(data_pnad, class)
+
+        data_tmp <- data_pnad %>%
+                unite(col = vars_indep, indep)
+
+        original_vars = names(data_tmp)
+
+        data_tmp <- data_tmp %>%
+                spread(key = vars_indep, value = n, fill = 0)
+
+        vars_to_gather <- setdiff(names(data_tmp), original_vars)
+
+        data_tmp <- data_tmp %>%
+                gather(key = vars_indep, value = n, vars_to_gather) %>%
+                separate(col = vars_indep, indep, sep = "_")
+
+        for(i in 1:length(original_classes)){
+                var_name  = names(original_classes)[i]
+                var_class = original_classes[i]
+                class(data_tmp[[var_name]]) = var_class
+        }
+
+        data_tmp
+}
+
+
+test_for_regression <- function(data_i, indep){
+
+        # For any independent variable, all categories must exist (i.e. have at least one observation)
+        # in all groups of the data
+
+        test_indeps <- rep(FALSE, length(indep))
+        names(test_indeps) <- indep
+
+        for(indep_i in indep){
+                test_n <- data_i %>%
+                        group_by_at(indep_i) %>%
+                        summarise(n = sum(n)) %>%
+                        .$n
+
+                test_n = any(test_n == 0)
+                test_indeps[indep_i] <- test_n
+        }
+
+        test_indeps
+}
+

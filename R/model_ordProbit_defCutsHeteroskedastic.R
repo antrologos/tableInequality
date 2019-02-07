@@ -13,18 +13,26 @@ model_ordProbit_defCutsHeteroskedastic <- function(formula,
 
         if(is.null(groups)){
                 data_pnad <- data_pnad %>%
-                        mutate(ID = 1) %>%
-                        arrange(ID, min_faixa)
+                        mutate(ID = 1)
+
+                IDs <- unique(data_pnad$ID)
         }else{
                 data_pnad <-
                         data_pnad %>%
-                        unite(col = ID, groups) %>%
+                        unite(col = ID, groups)
+
+                IDs <- unique(data_pnad$ID)
+
+                data_pnad <- data_pnad %>%
                         group_by_at(c("ID",dep,indep)) %>%
                         summarise(max_faixa = max(max_faixa),
                                   n         = sum(n)) %>%
                         ungroup() %>%
                         arrange(ID, min_faixa)
         }
+
+        data_pnad <- prepare_to_regression(data_pnad, indep)
+        gc()
 
         data_split <- split(data_pnad, f = data_pnad$ID)
 
@@ -43,22 +51,29 @@ model_ordProbit_defCutsHeteroskedastic <- function(formula,
                         mutate(log_min = log(min_faixa),
                                log_max = log(max_faixa))
 
-                # Removing empty categories
-                for(i in 1:length(indep)){
-                        test_i <- data_i %>%
-                                group_by_at(indep[i]) %>%
-                                summarise(n = sum(n))
-                        cat_problem = test_i[[1]][which(test_i$n == 0)]
-                        if(length(cat_problem > 0)){
-                                data_i <- data_i %>%
-                                        filter_at(vars(indep[i]), any_vars(. != cat_problem))
-                        }
-                }
-
                 X = model.matrix(formula, data = data_i)
                 w = data_i$n
                 log_min = data_i$log_min
                 log_max = data_i$log_max
+
+                # All categories of the independent variables must have valid observations
+                # (otherwise the number of estimated coeficients may not be same in each group)
+                test_indeps <- test_for_regression(data_i, indep)
+
+                if(any(test_indeps)){
+                        coefs = matrix(rep(as.numeric(NA), ncol(X)*4) , nrow = 1)
+
+                        names_beta   = paste0("beta_", colnames(X))
+                        names_lambda = paste0("lambda_",colnames(X))
+                        names_sd_beta = paste0("sdError_", names_beta)
+                        names_sd_lambda = paste0("sdError_", names_lambda)
+
+                        colnames(coefs) = c(names_beta, names_lambda, names_sd_beta, names_sd_lambda)
+
+                        coefs = as_tibble(coefs)
+                        coefs = bind_cols(tibble(ID = ID_i), coefs)
+                        return(coefs)
+                }
 
                 #beta   = rep(1, ncol(X))
                 #lambda = rep(1, ncol(X))
@@ -94,6 +109,23 @@ model_ordProbit_defCutsHeteroskedastic <- function(formula,
                                 parameters <- try(
                                         maxLik(logLik = likelihood,
                                                start  = start_values*jitter(sample(start_values))), silent = T)
+
+                                trial_number = trial_number + 1
+                        }
+
+                        if(trial_number > 10 & ("try-error" %in% class(parameters)) ){
+                                coefs = matrix(rep(as.numeric(NA), ncol(X)*4) , nrow = 1)
+
+                                names_beta   = paste0("beta_", colnames(X))
+                                names_lambda = paste0("lambda_",colnames(X))
+                                names_sd_beta = paste0("sdError_", names_beta)
+                                names_sd_lambda = paste0("sdError_", names_lambda)
+
+                                colnames(coefs) = c(names_beta, names_lambda, names_sd_beta, names_sd_lambda)
+
+                                coefs = as_tibble(coefs)
+                                coefs = bind_cols(tibble(ID = ID_i), coefs)
+                                return(coefs)
                         }
                 }
 
@@ -143,6 +175,10 @@ model_ordProbit_defCutsHeteroskedastic <- function(formula,
         #regression_result <- do.call(what = bind_rows, parameters)
 
         regression_result <- future_map_dfr(data_split, reg_loglin, .progress = T)
+
+        regression_result <- left_join(tibble(ID = IDs),
+                                       regression_result)
+
 
         if(is.null(groups)){
                 regression_result <- regression_result %>%

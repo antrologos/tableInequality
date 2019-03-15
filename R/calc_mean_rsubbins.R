@@ -24,6 +24,10 @@ calc_mean_rsubbins <- function(data_pnad, groups = NULL){
                 limites  = c(data$min_faixa[1], data$max_faixa)
                 contagem = c(0, data$n)
 
+                if(sum(contagem, na.rm = T) == 0){
+                        return(as.numeric(NA))
+                }
+
                 fit <- rsubbins(bEdges = limites, bCounts = contagem)
 
                 # grand mean
@@ -35,6 +39,10 @@ calc_mean_rsubbins <- function(data_pnad, groups = NULL){
 
                 mean
 
+        }
+
+        if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
+                plan(multiprocess)
         }
 
         mean_result <- future_map(.x = data_split, .f = mean_rsubbins) %>%

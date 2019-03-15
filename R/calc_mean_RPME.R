@@ -1,5 +1,8 @@
 #' @export
 
+#data_pnad <- pnads_1968_1973
+#groups = c("ano", "trimestre", "regiao", "educacao")
+
 calc_mean_RPME <- function(data_pnad, groups = NULL){
 
         if(is.null(groups)){

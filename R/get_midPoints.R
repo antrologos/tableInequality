@@ -3,6 +3,9 @@
 #data_pnad = c1970_aggreg
 #groups = c("municipalityCurrent", "male", "educationAttainment_aggreg")
 
+#data_pnad = pnads_1968_1973 %>% filter(regiao != "DF")
+#groups = c("ano", "trimestre", "regiao", "sexo","educacao")
+
 get_midPoints <- function(data_pnad, groups = NULL){
 
         if(is.null(groups)){
@@ -53,7 +56,6 @@ get_midPoints <- function(data_pnad, groups = NULL){
         #        get_alpha(data_split[[i]])
         #}
 
-
         colMax <- function(...){
                 apply(cbind(...), 1, max, na.rm=T)
         }
@@ -101,8 +103,17 @@ get_midPoints <- function(data_pnad, groups = NULL){
                 pnads_midpoints$ID = NULL
                 pnads_midpoints
         }else{
-                pnads_midpoints %>%
-                        separate(col = ID, into = groups, sep = "_")
+                if(length(groups) == 1){
+                        pnads_midpoints[[groups]] = pnads_midpoints[["ID"]]
+
+                        if(groups != "ID"){
+                                pnads_midpoints$ID = NULL
+                        }
+                        pnads_midpoints
+                }else{
+                        pnads_midpoints %>%
+                                separate(col = ID, into = groups, sep = "_")
+                }
         }
 }
 

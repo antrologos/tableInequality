@@ -1,0 +1,512 @@
+distributionProfile = ifelse(perc50_or_more_1st_e_2nd_brackets,    "j. 50%+ - 2nd bracket", distributionProfile),
+distributionProfile = ifelse(perc60_or_more_1st_e_2nd_brackets,    "i. 60%+ - 2nd bracket", distributionProfile),
+distributionProfile = ifelse(perc70_or_more_1st_e_2nd_brackets,    "h. 70%+ - 2nd bracket", distributionProfile),
+distributionProfile = ifelse(perc80_or_more_1st_e_2nd_brackets,    "g. 80%+ - 2nd bracket", distributionProfile),
+distributionProfile = ifelse(perc90_or_more_1st_e_2nd_brackets,    "f. 90%+ - 2nd bracket", distributionProfile),
+distributionProfile = ifelse(perc50_or_more_1st_bracket,  "e. 50%+ - 1st bracket", distributionProfile),
+distributionProfile = ifelse(perc60_or_more_1st_bracket,  "d. 60%+ - 1st bracket", distributionProfile),
+distributionProfile = ifelse(perc70_or_more_1st_bracket,  "c. 70%+ - 1st bracket", distributionProfile),
+distributionProfile = ifelse(perc80_or_more_1st_bracket,  "b. 80%+ - 1st bracket", distributionProfile),
+distributionProfile = ifelse(perc90_or_more_1st_bracket,  "a. 90%+ - 1st bracket", distributionProfile))
+verification_step3 <- verification_step2 %>%
+dplyr::select(ID, distributionProfile)
+if(is.null(groups)){
+verification_step3
+}else{
+verification_step3 %>%
+separate(col = ID, into = groups, sep = "_")
+}
+}
+distributionProfile <- verify_distributionProfile(c1970_aggreg, groups = "municipality2010standard")
+distributionProfile
+resultado = bind_rows(teste1,  teste2,  teste3,  teste4,  teste5,
+teste6,  teste7,  teste8,  teste9, teste10,
+teste11, teste12, teste13, teste14, teste15,
+teste16, teste17, teste18, teste19, teste20,
+teste21, teste22, teste23, teste24
+) %>%
+rename(est_gini = gini) %>%
+mutate(municipality2010standard = as.numeric(municipality2010standard)) %>%
+left_join(gini_munic_microdata, by = "municipality2010standard") %>%
+left_join(distributionProfile %>% mutate(municipality2010standard = as.numeric(municipality2010standard)))
+resultado
+setDT(resultado)
+resultado$count = 1
+resultado
+stats_fit  = resultado[, list(R2 = summary(lm(est_gini ~ gini))$r.squared,
+sigma   = summary(lm(est_gini ~ gini))$sigma,
+b0      = coef(lm(est_gini ~ gini))[1],
+b1      = coef(lm(est_gini ~ gini))[2],
+n_munic  = sum(count)),
+by="tipo,distributionProfile"] %>%
+setDT()
+stats_fit[order(distributionProfile,R2)] %>% View()
+best = stats_fit %>%
+filter(!(tipo %in% c("Parabolic Interpolation: actual means",
+"Parabolic: midpoint_yearAverage",
+"MCIB - non flat",
+"MCIB - flat"))) %>%
+group_by(distributionProfile) %>%
+top_n(n = 1, wt = R2)
+best
+best <- left_join(x = tibble(distributionProfile = c("a. 90%+ - 1st bracket", "b. 80%+ - 1st bracket",
+"c. 70%+ - 1st bracket", "d. 60%+ - 1st bracket",
+"e. 50%+ - 1st bracket", "f. 90%+ - 2nd bracket",
+"g. 80%+ - 2nd bracket", "h. 70%+ - 2nd bracket",
+"i. 60%+ - 2nd bracket", "j. 50%+ - 2nd bracket",
+"k. 90%+ - 3rd bracket", "l. 80%+ - 3rd bracket",
+"m. 70%+ - 3rd bracket", "n. 60%+ - 3rd bracket",
+"o. 50%+ - 3rd bracket", "p. well distributed" )),
+y =best) %>%
+filter(!duplicated(distributionProfile, R2))
+best
+write_csv(best,
+"C:/Users/Rogerio/Google Drive/RCodes/PacotesR/tableInequality/inst/extdata/bestStrategy_for_distributionProfile.csv")
+save.image("C:/Dropbox/Rogerio/Formacao/Pos-Doc/Exercicios com PNAD 1968-1973/2-Analises/Ambiente - TESTE 14 - Tentando entender porque o MCIB funciona mal no Censo de 1970.R.RData")
+library(tableInequality)
+load("C:/Dropbox/Rogerio/Formacao/Pos-Doc/Exercicios com PNAD 1968-1973/2-Analises/Ambiente - TESTE 14 - Tentando entender porque o MCIB funciona mal no Censo de 1970.R.RData")
+load("C:/Dropbox/Rogerio/Formacao/Pos-Doc/Exercicios com PNAD 1968-1973/2-Analises/Ambiente - TESTE 14 - Tentando entender porque o MCIB funciona mal no Censo de 1970.R.RData")
+rm(list = setdiff(ls(), "c1970_aggreg"))
+ginis_est <- bestStrategy_gini(c1970_aggreg, groups = "municipality2010standard")
+data_pnad = c1970_aggreg
+groups = "municipality2010standard"
+if(is.null(groups)){
+data_pnad <- data_pnad %>%
+mutate(ID = 1) %>%
+arrange(ID, min_faixa)
+}else{
+data_pnad <- data_pnad %>%
+unite(col = ID, groups) %>%
+group_by(ID, min_faixa) %>%
+summarise(
+max_faixa = max(max_faixa),
+n         = sum(n)) %>%
+ungroup() %>%
+arrange(ID, min_faixa)
+}
+data_pnad
+ID_list <- data_pnad$ID %>% unique()
+distributionProfile = verify_distributionProfile(data_pnad, "ID")
+distributionProfile
+best_strategy_list <- system.file("extdata",
+"bestStrategy_for_distributionProfile.csv",
+package = "tableInequality") %>%
+read.csv(stringsAsFactors = F)
+best_strategy_list
+ginis_est <- bestStrategy_gini(c1970_aggreg, groups = "municipality2010standard")
+ginis_est
+load("C:/Dropbox/Rogerio/Formacao/Pos-Doc/Exercicios com PNAD 1968-1973/2-Analises/Ambiente - TESTE 14 - Tentando entender porque o MCIB funciona mal no Censo de 1970.R.RData")
+ginis_est
+load("C:/Dropbox/Rogerio/Formacao/Pos-Doc/Exercicios com PNAD 1968-1973/2-Analises/Ambiente - TESTE 14 - Tentando entender porque o MCIB funciona mal no Censo de 1970.R.RData")
+library(tableInequality)
+ginis_est <- bestStrategy_gini(c1970_aggreg, groups = "municipality2010standard")
+ginis_est
+gini_munic_microdata
+ginis_est
+ginis_est = left_join(ginis_est %>% mutate(municipality2010standard = as.character(municipality2010standard)),
+gini_munic_microdata)
+ginis_est
+gini_munic_microdata
+ginis_est
+left_join(ginis_est %>%
+mutate(municipality2010standard = as.character(municipality2010standard)) %>%
+rename(gini_est = gini),
+gini_munic_microdata)
+left_join(ginis_est %>%
+mutate(municipality2010standard = as.numeric(municipality2010standard)) %>%
+rename(gini_est = gini),
+gini_munic_microdata)
+ginis_est = left_join(ginis_est %>%
+mutate(municipality2010standard = as.numeric(municipality2010standard)) %>%
+rename(gini_est = gini),
+gini_munic_microdata)
+ginis_est %>%
+ggplot(aes(x = gini, y= gini_est)) +
+geom_point(alpha = .3) +
+geom_abline(slope = 1, intercept = 0, color = red) +
+geom_smooth(method = "lm", color = "red", lty = 2) +
+ylim(0,1) + xlim(0,1)
+ginis_est %>%
+ggplot(aes(x = gini, y= gini_est)) +
+geom_point(alpha = .3) +
+geom_abline(slope = 1, intercept = 0, color = "red") +
+geom_smooth(method = "lm", color = "blue", lty = 2) +
+ylim(0,1) + xlim(0,1)
+ginis_est %>%
+ggplot(aes(x = gini, y= gini_est, color = strategy)) +
+geom_point(alpha = .3) +
+geom_abline(slope = 1, intercept = 0, color = "red") +
+geom_smooth(method = "lm", color = "blue", lty = 2) +
+ylim(0,1) + xlim(0,1)
+best
+?princomp
+stats_fit
+stats_fit
+stats_fit  = resultado[, list(R2 = summary(lm(est_gini ~ gini))$r.squared,
+sigma   = summary(lm(est_gini ~ gini))$sigma,
+b0      = coef(lm(est_gini ~ gini))[1],
+b1      = coef(lm(est_gini ~ gini))[2],
+b0_desv = (b0 - 0)^2,
+b1_desv = (b1 - 1)^2,
+n_munic  = sum(count)),
+by="tipo,distributionProfile"] %>%
+setDT()
+stats_fit  = stats_fit[, b0_desv := (b0 - 0)^2]
+stats_fit  = stats_fit[, b1_desv = (b1 - 1)^2]
+stats_fit  = resultado[, list(R2 = summary(lm(est_gini ~ gini))$r.squared,
+sigma   = summary(lm(est_gini ~ gini))$sigma,
+b0      = coef(lm(est_gini ~ gini))[1],
+b1      = coef(lm(est_gini ~ gini))[2],
+n_munic  = sum(count)),
+by="tipo,distributionProfile"] %>%
+setDT()
+stats_fit  = stats_fit[, b0_desv := (b0 - 0)^2]
+stats_fit  = stats_fit[, b1_desv = (b1 - 1)^2]
+stats_fit  = stats_fit[, b1_desv := (b1 - 1)^2]
+stats_fit
+stats_fit
+factors = princomp(~R2 + sigma + b0_desv + b1_desv, data = stats_fit)
+factors
+class(factors)
+methods(class(factors))
+class(factors)
+methods(class(factors))
+factors
+summary(factors)
+plot(factors)
+methods(class = class(factors))
+biplot(factors)
+stats_fit$factor = predict(factors)[,1]
+predict(factors)[,1]
+stats_fit$factor = predict(factors)[,1]
+factors = princomp(~R2 + b0_desv + b1_desv, data = stats_fit)
+summary(factors)
+plot(factors)
+biplot(factors)
+methods(class = class(factors))
+stats_fit$factor = predict(factors)[,1]
+stats_fit
+stats_fit  = resultado[, list(R2 = summary(lm(est_gini ~ gini))$r.squared,
+sigma   = summary(lm(est_gini ~ gini))$sigma,
+b0      = coef(lm(est_gini ~ gini))[1],
+b1      = coef(lm(est_gini ~ gini))[2],
+n_munic  = sum(count)),
+by="tipo,distributionProfile"] %>%
+setDT()
+stats_fit  = stats_fit[, b0_desv := (b0 - 0)^2]
+stats_fit  = stats_fit[, b1_desv := (b1 - 1)^2]
+stats_fit[order(distributionProfile,R2)] %>% View()
+factors = princomp(~R2 + b0_desv + b1_desv, data = stats_fit)
+summary(factors)
+plot(factors)
+biplot(factors)
+methods(class = class(factors))
+stats_fit$factor = predict(factors)[,1]
+best = stats_fit %>%
+filter(!(tipo %in% c("Parabolic Interpolation: actual means",
+"Parabolic: midpoint_yearAverage",
+"MCIB - non flat",
+"MCIB - flat"))) %>%
+group_by(distributionProfile) %>%
+top_n(n = 1, wt = factor)
+best
+best
+best = stats_fit %>%
+filter(!(tipo %in% c("Parabolic Interpolation: actual means",
+"Parabolic: midpoint_yearAverage",
+"MCIB - non flat",
+"MCIB - flat"))) %>%
+group_by(distributionProfile) %>%
+top_n(n = 3, wt = factor)
+View(best)
+View(best  %>% arrange(distributionProfile, desc(factor)))
+best = stats_fit %>%
+filter(!(tipo %in% c("Parabolic Interpolation: actual means",
+"Parabolic: midpoint_yearAverage",
+"MCIB - non flat",
+"MCIB - flat"))) %>%
+group_by(distributionProfile) %>%
+top_n(n = 3, wt = R2)
+View(best  %>% arrange(distributionProfile, desc(R2)))
+best = stats_fit %>%
+filter(!(tipo %in% c("Parabolic Interpolation: actual means",
+"Parabolic: midpoint_yearAverage",
+"MCIB - non flat",
+"MCIB - flat"))) %>%
+group_by(distributionProfile) %>%
+top_n(n = 1, wt = factor)
+best <- left_join(x = tibble(distributionProfile = c("a. 90%+ - 1st bracket", "b. 80%+ - 1st bracket",
+"c. 70%+ - 1st bracket", "d. 60%+ - 1st bracket",
+"e. 50%+ - 1st bracket", "f. 90%+ - 2nd bracket",
+"g. 80%+ - 2nd bracket", "h. 70%+ - 2nd bracket",
+"i. 60%+ - 2nd bracket", "j. 50%+ - 2nd bracket",
+"k. 90%+ - 3rd bracket", "l. 80%+ - 3rd bracket",
+"m. 70%+ - 3rd bracket", "n. 60%+ - 3rd bracket",
+"o. 50%+ - 3rd bracket", "p. well distributed" )),
+y =best) %>%
+filter(!duplicated(distributionProfile, R2))
+#View(best)
+write_csv(best,
+"C:/Users/Rogerio/Google Drive/RCodes/PacotesR/tableInequality/inst/extdata/bestStrategy_for_distributionProfile.csv")
+library(tableInequality)
+load("C:/Dropbox/Rogerio/Formacao/Pos-Doc/Exercicios com PNAD 1968-1973/2-Analises/Ambiente - TESTE 14 - Tentando entender porque o MCIB funciona mal no Censo de 1970.R.RData")
+rm(list = setdiff(ls(), "c1970_aggreg"))
+ginis_est <- bestStrategy_gini(c1970_aggreg, groups = "municipality2010standard")
+best = stats_fit %>%
+filter(!(tipo %in% c("Parabolic Interpolation: actual means",
+"Parabolic: midpoint_yearAverage",
+"MCIB - non flat",
+"MCIB - flat"))) %>%
+group_by(distributionProfile) %>%
+top_n(n = 1, wt = R2)
+stats_fit
+rm(list=ls());gc()
+options(scipen =999)
+library(harmonizeIBGE)
+library(IC2)
+library(tableInequality)
+library(Hmisc)
+library(ggplot2)
+load("C:/Dropbox/Rogerio/Formacao/Pos-Doc/Exercicios com PNAD 1968-1973/2-Analises/Ambiente - TESTE 14 - Tentando entender porque o MCIB funciona mal no Censo de 1970.R.RData")
+best
+best = stats_fit %>%
+filter(!(tipo %in% c("Parabolic Interpolation: actual means",
+"Parabolic: midpoint_yearAverage",
+"MCIB - non flat",
+"MCIB - flat"))) %>%
+group_by(distributionProfile) %>%
+top_n(n = 1, wt = R2)
+best
+stats_fit  = resultado[, list(R2 = summary(lm(est_gini ~ gini))$r.squared,
+sigma   = summary(lm(est_gini ~ gini))$sigma,
+b0      = coef(lm(est_gini ~ gini))[1],
+b1      = coef(lm(est_gini ~ gini))[2],
+n_munic  = sum(count)),
+by="tipo,distributionProfile"] %>%
+setDT()
+stats_fit  = stats_fit[, b0_desv := (b0 - 0)^2]
+stats_fit  = stats_fit[, b1_desv := (b1 - 1)^2]
+stats_fit[order(distributionProfile,R2)] %>% View()
+factors = princomp(~R2 + b0_desv + b1_desv, data = stats_fit)
+summary(factors)
+plot(factors)
+biplot(factors)
+methods(class = class(factors))
+stats_fit$factor = predict(factors)[,1]
+best = stats_fit %>%
+filter(!(tipo %in% c("Parabolic Interpolation: actual means",
+"Parabolic: midpoint_yearAverage",
+"MCIB - non flat",
+"MCIB - flat"))) %>%
+group_by(distributionProfile) %>%
+top_n(n = 1, wt = R2)
+best <- left_join(x = tibble(distributionProfile = c("a. 90%+ - 1st bracket", "b. 80%+ - 1st bracket",
+"c. 70%+ - 1st bracket", "d. 60%+ - 1st bracket",
+"e. 50%+ - 1st bracket", "f. 90%+ - 2nd bracket",
+"g. 80%+ - 2nd bracket", "h. 70%+ - 2nd bracket",
+"i. 60%+ - 2nd bracket", "j. 50%+ - 2nd bracket",
+"k. 90%+ - 3rd bracket", "l. 80%+ - 3rd bracket",
+"m. 70%+ - 3rd bracket", "n. 60%+ - 3rd bracket",
+"o. 50%+ - 3rd bracket", "p. well distributed" )),
+y =best) %>%
+filter(!duplicated(distributionProfile, R2))
+#View(best)
+write_csv(best,
+"C:/Users/Rogerio/Google Drive/RCodes/PacotesR/tableInequality/inst/extdata/bestStrategy_for_distributionProfile.csv")
+best
+ginis_est
+library(tableInequality)
+load("E:/Dropbox-Ro/Dropbox/Rogerio/Formacao/Pos-Doc/Exercicios com PNAD 1968-1973/2-Analises/Ambiente - TESTE 14 - Tentando entender porque o MCIB funciona mal no Censo de 1970.R.RData")
+distributionProfile
+descr::freq(distributionProfile)
+descr::freq(distributionProfile)
+descr::freq(distributionProfile$distributionProfile)
+load("E:/Dropbox-Ro/Dropbox/Rogerio/Formacao/Pos-Doc/Exercicios com PNAD 1968-1973/2-Analises/Ambiente - TESTE 16 - Escolhendo melhor estratégia - 1980.RData")
+descr::freq(distributionProfile$distributionProfile)
+resultado
+table(resultado$tipo)
+table(resultado$tipo) %>% names()
+options(scipen =999)
+library(harmonizeIBGE)
+library(IC2)
+library(tableInequality)
+library(Hmisc)
+library(ggplot2)
+table(resultado$tipo) %>% names()
+names()
+grupo1 = table(resultado$tipo) %>% names()[1:10]
+grupo2 = table(resultado$tipo) %>% names()[11:20]
+grupo3 = table(resultado$tipo) %>% names()[21:31]
+grupo1 = (table(resultado$tipo) %>% names())[1:10]
+grupo1 = (table(resultado$tipo) %>% names())[1:10]
+grupo2 = (table(resultado$tipo) %>% names())[11:20]
+grupo3 = (table(resultado$tipo) %>% names())[21:31]
+resultado
+resultado %>%
+filter(tipo %in% grupo1) %>%
+ggplot(aes(x = est_gini, y = gini, color = distributionProfile)) %>%
+geom_point(alpha = .25) +
+geom_abline(slope = 1, intercept = 0, color = "red") +
+geom_smooth(method = "lm", color = "blue", lty = 2) +
+ylim(0,1) + xlim(0,1) +
+facet_grid(tipo ~distributionProfile)
+resultado %>%
+filter(tipo %in% grupo1) %>%
+ggplot(aes(x = est_gini, y = gini, color = distributionProfile)) +
+geom_point(alpha = .25) +
+geom_abline(slope = 1, intercept = 0, color = "red") +
+geom_smooth(method = "lm", color = "blue", lty = 2) +
+ylim(0,1) + xlim(0,1) +
+facet_grid(tipo ~distributionProfile)
+resultado %>%
+filter(tipo %in% grupo2) %>%
+ggplot(aes(x = est_gini, y = gini, color = distributionProfile)) +
+geom_point(alpha = .25) +
+geom_abline(slope = 1, intercept = 0, color = "red") +
+geom_smooth(method = "lm", color = "blue", lty = 2) +
+ylim(0,1) + xlim(0,1) +
+facet_grid(tipo ~distributionProfile)
+resultado %>%
+filter(tipo %in% grupo3) %>%
+ggplot(aes(x = est_gini, y = gini, color = distributionProfile)) +
+geom_point(alpha = .25) +
+geom_abline(slope = 1, intercept = 0, color = "red") +
+geom_smooth(method = "lm", color = "blue", lty = 2) +
+ylim(0,1) + xlim(0,1) +
+facet_grid(tipo ~distributionProfile)
+grupo2
+teste11
+teste24
+j = 17
+for(tipo_i in tipos){
+print(j)
+print(paste("====" ,tipo_i))
+assign(paste0("teste", j), value =
+calc_gini_parabolicInterp(midpoints_misc %>% filter(tipo == tipo_i),
+groups = "municipality2010standard") %>%
+mutate(tipo = paste("Parabolic:", tipo_i))
+)
+j = j + 1
+}
+tipos = table(resultado$tipo) %>% names()
+tipos
+resultado = bind_rows(teste1,  teste2,  teste3,  teste4,  teste5,
+teste6,  teste7,  teste8,  teste9, teste10,
+teste11, teste12, teste13, teste14, teste15,
+teste16, teste17, teste18, teste19, teste20,
+teste21, teste22, teste23, teste24) %>%
+rename(est_gini = gini) %>%
+mutate(municipality2010standard = as.numeric(municipality2010standard)) %>%
+left_join(gini_munic_microdata, by = "municipality2010standard") %>%
+left_join(distributionProfile %>% mutate(municipality2010standard = as.numeric(municipality2010standard)))
+tipos = table(resultado$tipo) %>% names()
+tipos = tipos[!(tipos %in% c("Parabolic Interpolation: actual means",
+"Parabolic: midpoint_yearAverage",
+"MCIB - non flat",
+"MCIB - flat"))]
+tipos
+grupo1 = tipos[1:7]
+grupo2 = tipos[8:14]
+grupo3 = tipos[15:21]
+grupo4 = tipos[21:28]
+resultado %>%
+filter(tipo %in% grupo1) %>%
+ggplot(aes(x = est_gini, y = gini, color = distributionProfile)) +
+geom_point(alpha = .25) +
+geom_abline(slope = 1, intercept = 0, color = "red") +
+geom_smooth(method = "lm", color = "blue", lty = 2) +
+ylim(0,1) + xlim(0,1) +
+facet_grid(tipo ~distributionProfile)
+resultado %>%
+filter(tipo %in% grupo2) %>%
+ggplot(aes(x = est_gini, y = gini, color = distributionProfile)) +
+geom_point(alpha = .25) +
+geom_abline(slope = 1, intercept = 0, color = "red") +
+geom_smooth(method = "lm", color = "blue", lty = 2) +
+ylim(0,1) + xlim(0,1) +
+facet_grid(tipo ~distributionProfile)
+resultado %>%
+filter(tipo %in% grupo3) %>%
+ggplot(aes(x = est_gini, y = gini, color = distributionProfile)) +
+geom_point(alpha = .25) +
+geom_abline(slope = 1, intercept = 0, color = "red") +
+geom_smooth(method = "lm", color = "blue", lty = 2) +
+ylim(0,1) + xlim(0,1) +
+facet_grid(tipo ~distributionProfile)
+resultado %>%
+filter(tipo %in% grupo4) %>%
+ggplot(aes(x = est_gini, y = gini, color = distributionProfile)) +
+geom_point(alpha = .25) +
+geom_abline(slope = 1, intercept = 0, color = "red") +
+geom_smooth(method = "lm", color = "blue", lty = 2) +
+ylim(0,1) + xlim(0,1) +
+facet_grid(tipo ~distributionProfile)
+tipos = table(resultado$tipo) %>% names()
+tipos = tipos[!(tipos %in% c("Parabolic Interpolation: actual means",
+"Parabolic: midpoint_yearAverage",
+"Parabolic: midpoint_actual",
+"MCIB - non flat",
+"MCIB - flat"))]
+grupo1 = tipos[1:7]
+grupo2 = tipos[8:14]
+grupo3 = tipos[15:21]
+grupo4 = tipos[21:28]
+resultado %>%
+filter(tipo %in% c("Parabolic Interpolation: actual means",
+"Parabolic: midpoint_yearAverage",
+"Parabolic: midpoint_actual",
+"MCIB - non flat",
+"MCIB - flat")) %>%
+ggplot(aes(x = est_gini, y = gini, color = distributionProfile)) +
+geom_point(alpha = .25) +
+geom_abline(slope = 1, intercept = 0, color = "red") +
+geom_smooth(method = "lm", color = "blue", lty = 2) +
+ylim(0,1) + xlim(0,1) +
+facet_grid(tipo ~distributionProfile)
+setDT(resultado)
+resultado$count = 1
+stats_fit  = resultado[, list(R2 = summary(lm(est_gini ~ gini))$r.squared,
+sigma   = summary(lm(est_gini ~ gini))$sigma,
+b0      = coef(lm(est_gini ~ gini))[1],
+b1      = coef(lm(est_gini ~ gini))[2],
+n_munic  = sum(count)),
+by="tipo,distributionProfile"] %>%
+setDT()
+stats_fit
+stats_fit  = stats_fit[, b0_desv := (b0 - 0)^2]
+stats_fit  = stats_fit[, b1_desv := (b1 - 1)^2]
+stats_fit[order(distributionProfile,R2)] %>% View()
+save.image("E:/Dropbox-Ro/Dropbox/Rogerio/Formacao/Pos-Doc/Exercicios com PNAD 1968-1973/2-Analises/Ambiente - TESTE 16 - Escolhendo melhor estratégia - 1980.RData")
+library(tableInequality)
+warnings()
+rm(list=ls());gc()
+options(scipen =999)
+library(harmonizeIBGE)
+library(IC2)
+library(tableInequality)
+library(Hmisc)
+library(ggplot2)
+load("E:/Dropbox-Ro/Dropbox/Rogerio/Formacao/Pos-Doc/Exercicios com PNAD 1968-1973/2-Analises/Ambiente - TESTE 16 - Escolhendo melhor estratégia - 1980.RData")
+distributionProfile <- verify_distributionProfile(c1980_aggreg, groups = "municipality2010standard")
+descr::freq(distributionProfile$distributionProfile)
+resultado %>%
+filter(tipo %in% grupo4) %>%
+ggplot(aes(x = est_gini, y = gini, color = distributionProfile)) +
+geom_point(alpha = .25) +
+geom_abline(slope = 1, intercept = 0, color = "red") +
+geom_smooth(method = "lm", color = "blue", lty = 2) +
+ylim(0,1) + xlim(0,1) +
+facet_grid(tipo ~distributionProfile)
+resultado %>%
+filter(tipo %in% c("Parabolic Interpolation: actual means",
+"Parabolic: midpoint_yearAverage",
+"Parabolic: midpoint_actual",
+"MCIB - non flat",
+"MCIB - flat")) %>%
+ggplot(aes(x = est_gini, y = gini, color = distributionProfile)) +
+geom_point(alpha = .25) +
+geom_abline(slope = 1, intercept = 0, color = "red") +
+geom_smooth(method = "lm", color = "blue", lty = 2) +
+ylim(0,1) + xlim(0,1) +
+facet_grid(tipo ~distributionProfile)
+save.image("E:/Dropbox-Ro/Dropbox/Rogerio/Formacao/Pos-Doc/Exercicios com PNAD 1968-1973/2-Analises/Ambiente - TESTE 16 - Escolhendo melhor estratégia - 1980.RData")

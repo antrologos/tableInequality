@@ -15,16 +15,31 @@ model_quantreg_rsubbins <- function(formula, data_pnad, tau = .5,
 
         if(is.null(groups)){
                 data_pnad <- data_pnad %>%
-                        mutate(ID = 1) %>%
-                        arrange(ID, min_faixa)
-        }else{
+                        mutate(ID = 1)
+
+                IDs <- unique(data_pnad$ID)
+
                 data_pnad <- data_pnad %>%
-                        unite(col = ID, groups) %>%
+                        group_by_at(c("ID", "min_faixa", "max_faixa", indep)) %>%
+                        summarise(n         = sum(n)) %>%
+                        ungroup() %>%
+                        arrange(ID, min_faixa)
+
+        }else{
+                data_pnad <-
+                        data_pnad %>%
+                        unite(col = ID, groups)
+
+                IDs <- unique(data_pnad$ID)
+
+                data_pnad <- data_pnad %>%
+                        group_by_at(c("ID", "min_faixa", "max_faixa", indep)) %>%
+                        summarise(n = sum(n)) %>%
+                        ungroup() %>%
                         arrange(ID, min_faixa)
         }
 
-
-        data_pnad <- prepare_to_regression(data_pnad, indep)
+        data_pnad <- tableInequality:::prepare_to_regression(data_pnad, indep)
         gc()
 
         data_split <- split(data_pnad, f = data_pnad$ID)
@@ -60,7 +75,7 @@ model_quantreg_rsubbins <- function(formula, data_pnad, tau = .5,
                 formula_tmp[[2]] = NULL
                 X_groups = model.matrix(formula_tmp, data = X_groups)
 
-                test_indeps <- test_for_regression(data_i, indep)
+                test_indeps <- tableInequality:::test_for_regression(data_i, indep)
 
                 if(any(test_indeps)){
                         if(confidence_intervals == F){
@@ -117,8 +132,8 @@ model_quantreg_rsubbins <- function(formula, data_pnad, tau = .5,
                                             col = varIndepIDs, into = indep)
 
                         data_sim_i <- bind_rows(replicate(nsims_i, X_values , simplify = FALSE)) %>%
-                                mutate(y = quantile_functions[[i]](runif(nsims_i)),
-                                       wgt := rsub_fits[[i]]$rsubPDF(y) * data_p[i,]$p)
+                                mutate(y   = quantile_functions[[i]](runif(nsims_i)),
+                                       wgt = rsub_fits[[i]]$rsubPDF(y) * data_p[i,]$p)
 
                         data_sim_i
                 }
@@ -137,8 +152,8 @@ model_quantreg_rsubbins <- function(formula, data_pnad, tau = .5,
                                                                                     rsub_fits = rsub_fits,
                                                                                     quantile_functions = quantile_functions,
                                                                                     indep = indep, nsims_i = nsims_i))
-                        setDT(data_sim)
-                        y   = data_sim[ , eval(formula[[2]])]
+
+                        y   = model.matrix(formula[1:2], data_sim)[, 2]
                         wgt = data_sim$wgt
                         X   = model.matrix(formula, data_sim)
 
@@ -250,14 +265,27 @@ model_quantreg_rsubbins <- function(formula, data_pnad, tau = .5,
                                          dep = dep, indep = indep,
                                          nsim_CI = nsim_CI,
                                          .progress = T,
-                                         .options = future_options(packages = c("tidyr",
+                                         .options = future_options(globals = c("formula",
+                                                                               "tau",
+                                                                               "groups",
+                                                                               "confidence_intervals",
+                                                                               "binSampleSize",
+                                                                               "CI_lowerBound",
+                                                                               "CI_upperBound",
+                                                                               "dep",
+                                                                               "indep",
+                                                                               "nsim_CI"),
+                                                                   packages = c("tidyr",
                                                                                 "dplyr",
                                                                                 "binsmooth",
                                                                                 "quantreg",
                                                                                 "data.table")
-                                         ))
+                                                                   ))
 
         regquantile_result <- do.call(bind_rows, regquantile_result)
+
+        regquantile_result <- left_join(tibble(ID = IDs),
+                                        regquantile_result)
 
         if(is.null(groups)){
                 regquantile_result <- regquantile_result %>%

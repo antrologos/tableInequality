@@ -24,6 +24,10 @@ calc_mean_splinebins <- function(data_pnad, groups = NULL){
                 limites  <- c(data_i$min_faixa[1],data_i$max_faixa)
                 contagem <- c(0, data_i$n)
 
+                if(sum(contagem, na.rm = T) == 0){
+                        return(as.numeric(NA))
+                }
+
                 fit <- splinebins(bEdges = limites, bCounts = contagem)
 
                 # mean by integration (quadrature - Gauss-Legendre)
@@ -33,6 +37,10 @@ calc_mean_splinebins <- function(data_pnad, groups = NULL){
                 mean = mvQuad::quadrature(f = function(y) y*fit$splinePDF(y), grid = grid_mean)
 
                 mean
+        }
+
+        if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
+                plan(multiprocess)
         }
 
         mean_result <- future_map(.x = data_split, .f = mean_splinebins) %>%

@@ -1,5 +1,6 @@
 #' @export
 
+
 calc_mean_MCIB <- function(data_pnad, groups = NULL,
                            topBracket_method = c("gpinter","RPME"),
                            firstBracket_flat = TRUE){
@@ -34,7 +35,12 @@ calc_mean_MCIB <- function(data_pnad, groups = NULL,
                 upper_i = data_i$max_faixa
                 n_i     = data_i$n
 
-                N = sum(n_i)
+                N = sum(n_i, na.rm = T)
+
+                if(N == 0){
+                        return(NA)
+                }
+
 
                 lower_i = rowMeans(cbind(lower_i,c(NA, upper_i[-length(upper_i)])),na.rm = T)
                 upper_i = c(lower_i[-1], NA)
@@ -230,6 +236,7 @@ calc_mean_MCIB <- function(data_pnad, groups = NULL,
         }
 
         grid_mean = mvQuad::createNIGrid(dim = 1, type = "GLe", level = 10000)
+
 
         mean_result <- future_map_dbl(.x = data_split,
                                       .f = mean_MCIB,

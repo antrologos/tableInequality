@@ -46,17 +46,19 @@ model_midPoints <- function(formula,
                         dplyr::select(vars) %>%
                         filter(complete.cases(.))
 
-                X = model.matrix(formula, data = data_ii)
-                y = with(data_ii, eval(formula[[2]]))
-
                 if(is.null(weight)){
                         w = rep(1, length(y))
                 }else{
                         w = data_ii[[weight]]
                 }
 
-                sqrt_w = sqrt(w)
+                data_ii <- data_ii[w > 0, ]
+                w = data_ii[[weight]]
 
+                X = model.matrix(formula, data = data_ii)
+                y = with(data_ii, eval(formula[[2]]))
+
+                sqrt_w = sqrt(w)
 
                 beta = try(
                         crossprod(solve(crossprod(sqrt_w*X)), crossprod(sqrt_w*X, sqrt_w*y)) %>% t(),
@@ -90,7 +92,6 @@ model_midPoints <- function(formula,
                                 formula = formula,
                                 weight  = weight,
                                 .progress = T)
-
 
         if(is.null(groups)){
                 betas_result <- betas_result %>%

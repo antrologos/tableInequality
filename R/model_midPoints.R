@@ -140,13 +140,6 @@ residuals.midpointModel <- function(midpointModel){
         residuals_list
 }
 
-
-#' @export
-model.matrix.midpointModel <- function(midpointModel){
-        model_matrix_list = purrr::map(midpointModel, function(x) x$model_matrix)
-        model_matrix_list
-}
-
 #' @export
 model.matrix.midpointModel <- function(midpointModel, weights = F){
         model_matrix_list = purrr::map(midpointModel, function(x) x$model_matrix)
@@ -163,14 +156,21 @@ model.matrix.midpointModel <- function(midpointModel, weights = F){
         model_matrix_list
 }
 
+
 #' @export
-coefficients.midpointModel <- function(midpointModel){
-        coefficients_list = purrr::map(midpointModel, function(x) x$parameters$coefficients)
-        coefficients_matrix <- do.call(cbind, coefficients_list)
+coef.midpointModel <- function(midpointModel){
 
-        var_names <- midpointModel[[1]]$parameters[[1]] %>% as.character()
+        beta_df <- purrr::map_dfr(midpointModel, function(x) as_tibble(matrix(x$parameters$coefficients, nrow = 1)) %>% setNames(x$parameters$parameter))
 
-        rownames(coefficients_matrix) <- var_names
+        parameter_names <- names(beta_df)
+
+        beta_matrix <- beta_df %>%
+                as.matrix() %>%
+                t()
+
+        colnames(beta_matrix) <- names(midpointModel)
+
+        beta_matrix
 }
 
 

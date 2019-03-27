@@ -1,9 +1,9 @@
 #' @export
 
-model_ordProbit_defCutsHeteroskedastic <- function(formula_rhs,
-                                                   data_pnad,
-                                                   groups = NULL,
-                                                   max_trials = 20){
+model_ordProbit <- function(formula_rhs,
+                            data_pnad,
+                            groups = NULL,
+                            max_trials = 20){
 
         if(length(formula_rhs) != 2){
                 stop("formula_rhs must cointain only the right hand side (independent variables)")
@@ -40,7 +40,7 @@ model_ordProbit_defCutsHeteroskedastic <- function(formula_rhs,
 
         data_split <- split(data_pnad, f = data_pnad$ID)
 
-        #data_i = data_split[[1]]
+        #data_i = data_split[[5]]
 
         reg_loglin = function(data_i, formula_rhs, max_trials){
 
@@ -218,6 +218,14 @@ model_ordProbit_defCutsHeteroskedastic <- function(formula_rhs,
 
                 classification_table <- questionr::wtd.table(log_min, pred_cateogry, w)
 
+                classification_df <- classification_table %>%
+                        as_tibble()
+
+                corr_Spearman <- wCorr::weightedCorr(x = classification_df[[1]],
+                                                     y = classification_df[[2]],
+                                                     method = c("Spearman"),
+                                                     weights = classification_df[[3]])
+
                 parameters_beta <- tibble(parameter    = colnames(X),
                                           coefficients = beta,
                                           sd           = sd_beta,
@@ -246,8 +254,9 @@ model_ordProbit_defCutsHeteroskedastic <- function(formula_rhs,
                      pseudoR2_Nagelkerke     = (1 - exp(loglikelihood_null - loglikelihood)^(2/N))/(1 - exp(loglikelihood_null)^(2/N)),
 
                      classification_table    = classification_table,
-
                      prop_correct_classified = sum(diag(classification_table))/sum(classification_table),
+                     R_Spearman              = corr_Spearman,
+                     R_Spearman2             = (corr_Spearman)^2,
                      N                       = N)
         }
 
@@ -269,7 +278,7 @@ model_ordProbit_defCutsHeteroskedastic <- function(formula_rhs,
                                         max_trials  = max_trials,
                                         .progress   = T)
 
-        class(regression_result) <- "ordProbit_defCutsHeteroskedastic"
+        class(regression_result) <- "ordProbitModel"
 
         #if(is.null(groups)){
         #        regression_result <- regression_result %>%
@@ -285,11 +294,11 @@ model_ordProbit_defCutsHeteroskedastic <- function(formula_rhs,
 
 
 #' @export
-model.matrix.ordProbit_defCutsHeteroskedastic <- function(ordProbit_defCutsHeteroskedastic, weights = F){
-        model_matrix_list = purrr::map(ordProbit_defCutsHeteroskedastic, function(x) x$model_matrix)
+model.matrix.ordProbitModel <- function(ordProbitModel, weights = F){
+        model_matrix_list = purrr::map(ordProbitModel, function(x) x$model_matrix)
 
         if(weights == T){
-                weights_list = purrr::map(ordProbit_defCutsHeteroskedastic, function(x) x$weights)
+                weights_list = purrr::map(ordProbitModel, function(x) x$weights)
 
                 for(i in 1:length(model_matrix_list)){
                         model_matrix_list[[i]] <- cbind(model_matrix_list[[i]], weights_list[[i]])
@@ -303,18 +312,18 @@ model.matrix.ordProbit_defCutsHeteroskedastic <- function(ordProbit_defCutsHeter
 
 
 #' @export
-coef.ordProbit_defCutsHeteroskedastic <- function(ordProbit_defCutsHeteroskedastic){
+coef.ordProbitModel <- function(ordProbitModel){
 
-        beta_df <- purrr::map_dfr(ordProbit_defCutsHeteroskedastic, function(x) as_tibble(matrix(x$parameters_beta$coefficients, nrow = 1)))
-        lambda_df <- purrr::map_dfr(ordProbit_defCutsHeteroskedastic, function(x) as_tibble(matrix(x$parameters_lambda$coefficients, nrow = 1)))
+        beta_df <- purrr::map_dfr(ordProbitModel, function(x) as_tibble(matrix(x$parameters_beta$coefficients, nrow = 1)))
+        lambda_df <- purrr::map_dfr(ordProbitModel, function(x) as_tibble(matrix(x$parameters_lambda$coefficients, nrow = 1)))
 
-        parameter_names <- ordProbit_defCutsHeteroskedastic[[1]]$parameters_beta$parameter
+        parameter_names <- ordProbitModel[[1]]$parameters_beta$parameter
 
         beta_matrix   <- beta_df   %>% as.matrix() %>% t()
         lambda_matrix <- lambda_df %>% as.matrix() %>% t()
 
-        colnames(beta_matrix)   <- names(ordProbit_defCutsHeteroskedastic)
-        colnames(lambda_matrix) <- names(ordProbit_defCutsHeteroskedastic)
+        colnames(beta_matrix)   <- names(ordProbitModel)
+        colnames(lambda_matrix) <- names(ordProbitModel)
 
         rownames(beta_matrix)   <- parameter_names
         rownames(lambda_matrix) <- parameter_names
@@ -325,13 +334,13 @@ coef.ordProbit_defCutsHeteroskedastic <- function(ordProbit_defCutsHeteroskedast
 
 
 #' @export
-summary.ordProbit_defCutsHeteroskedastic <- function(ordProbit_defCutsHeteroskedastic, digits = 3){
+summary.ordProbitModel <- function(ordProbitModel, digits = 3){
 
         extract_summary <- function(type){
 
-                coef_matrix <- purrr::map(ordProbit_defCutsHeteroskedastic, function(x) as_tibble(matrix(x[[paste0("parameters_",type)]]$coefficients, nrow = 1)) %>% setNames(x[[paste0("parameters_",type)]]$parameter))
-                sd_matrix   <- purrr::map(ordProbit_defCutsHeteroskedastic, function(x) as_tibble(matrix(x[[paste0("parameters_",type)]]$sd,           nrow = 1)) %>% setNames(x[[paste0("parameters_",type)]]$parameter))
-                p_matrix    <- purrr::map(ordProbit_defCutsHeteroskedastic, function(x) as_tibble(matrix(x[[paste0("parameters_",type)]]$p_value,      nrow = 1)) %>% setNames(x[[paste0("parameters_",type)]]$parameter))
+                coef_matrix <- purrr::map(ordProbitModel, function(x) as_tibble(matrix(x[[paste0("parameters_",type)]]$coefficients, nrow = 1)) %>% setNames(x[[paste0("parameters_",type)]]$parameter))
+                sd_matrix   <- purrr::map(ordProbitModel, function(x) as_tibble(matrix(x[[paste0("parameters_",type)]]$sd,           nrow = 1)) %>% setNames(x[[paste0("parameters_",type)]]$parameter))
+                p_matrix    <- purrr::map(ordProbitModel, function(x) as_tibble(matrix(x[[paste0("parameters_",type)]]$p_value,      nrow = 1)) %>% setNames(x[[paste0("parameters_",type)]]$parameter))
 
                 coef_matrix <- do.call(bind_rows, coef_matrix) %>% as.matrix() %>% t()
                 sd_matrix   <- do.call(bind_rows, sd_matrix)   %>% as.matrix() %>% t()
@@ -339,11 +348,13 @@ summary.ordProbit_defCutsHeteroskedastic <- function(ordProbit_defCutsHeterosked
 
                 var_names   <- rownames(coef_matrix)
 
-                AIC                     <- purrr::map_dbl(ordProbit_defCutsHeteroskedastic, function(x) x$AIC)
-                `-2loglik`              <- purrr::map_dbl(ordProbit_defCutsHeteroskedastic, function(x) x$`-2loglik`)
-                pseudoR2_mcfadden_adj   <- purrr::map_dbl(ordProbit_defCutsHeteroskedastic, function(x) x$pseudoR2_mcfadden_adj)
-                prop_correct_classified <- purrr::map_dbl(ordProbit_defCutsHeteroskedastic, function(x) x$prop_correct_classified)
-                N                       <- purrr::map_dbl(ordProbit_defCutsHeteroskedastic, function(x) x$N)
+                AIC                     <- purrr::map_dbl(ordProbitModel, function(x) x$AIC)
+                `-2loglik`              <- purrr::map_dbl(ordProbitModel, function(x) x$`-2loglik`)
+                pseudoR2_mcfadden_adj   <- purrr::map_dbl(ordProbitModel, function(x) x$pseudoR2_mcfadden_adj)
+                prop_correct_classified <- purrr::map_dbl(ordProbitModel, function(x) x$prop_correct_classified)
+                N                       <- purrr::map_dbl(ordProbitModel, function(x) x$N)
+                R_Spearman              <- purrr::map_dbl(ordProbitModel, function(x) x$R_Spearman)
+                R_Spearman2             <- purrr::map_dbl(ordProbitModel, function(x) x$R_Spearman2)
 
                 coef_matrix_char <- format(coef_matrix, digits = digits)
                 sd_matrix_char   <- format(sd_matrix,   digits = digits)
@@ -387,10 +398,13 @@ summary.ordProbit_defCutsHeteroskedastic <- function(ordProbit_defCutsHeterosked
                                  `-2loglik`,
                                  format(pseudoR2_mcfadden_adj,   digits = digits),
                                  format(prop_correct_classified,   digits = digits),
+                                 format(R_Spearman,   digits = digits),
+                                 format(R_Spearman2,   digits = digits),
                                  format(N,    digits = 0))
 
 
-                rownames(results) <- c(rep("", 2*length(var_names)), "", "AIC", "-2loglik", "McFadden Pseudo R2 (Adj)", "Prop Corr. Class", "N")
+                rownames(results) <- c(rep("", 2*length(var_names)), "", "AIC", "-2loglik", "McFadden Pseudo R2 (Adj)",
+                                       "Prop Corr. Class","R_Spearman","R_Spearman2", "N")
                 rownames(results)[uneven_lines] <- var_names
 
                 results
@@ -403,7 +417,7 @@ summary.ordProbit_defCutsHeteroskedastic <- function(ordProbit_defCutsHeterosked
 }
 
 #' @export
-print.ordProbit_defCutsHeteroskedastic <- function(ordProbit_defCutsHeteroskedastic){
-        print(summary(ordProbit_defCutsHeteroskedastic))
+print.ordProbitModel <- function(ordProbitModel){
+        print(summary(ordProbitModel))
 }
 

@@ -15,7 +15,8 @@ Depends: R (>= 3.4.4),
         parallel,
         pracma,
         questionr,
-        tidyverse
+        tidyverse,
+        wCorr
 License: What license is it under?
 Encoding: UTF-8
 LazyData: true

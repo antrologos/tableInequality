@@ -1,19 +1,19 @@
-varDecomp <- function (model, data, formula, weight) {
+#' @export
+varDecomp <- function (model) {
         UseMethod("varDecomp")
 }
 
 
 #' @export
-varDecomp.midpointModel <- function(model, data, formula, weight){
+varDecomp.midpointModel <- function(model){
         matrix_beta <- coefficients(model)
 
         list_X <- model.matrix(model)
         list_e <- residuals(model)
         list_w <- map(.x = names(model), function(x) model[[x]]$weights)
 
+        formula   = model[[1]]$formula
         indep_vars <- all.vars(formula[[3]])
-
-        k=1
 
         matrix_lambda = NULL
         lambdas_list = list()
@@ -67,14 +67,10 @@ varDecomp.midpointModel <- function(model, data, formula, weight){
         }
         colnames(matrix_lambda) = colnames(matrix_beta)
 
-
-        list_vars <- NULL
-        for(indep_var in indep_vars){
-                list_vars[[indep_var]] <- unique(data[[indep_var]])
-        }
-
+        list_vars = model[[1]]$independentVariablesValues
         data_X <- do.call(expand.grid, list_vars)
         data_X <- data_X %>% mutate_all(as.character)
+
         formula[2] <- NULL
         X     <- model.matrix(formula, data_X)
         X     <- X[ , colnames(list_X[[1]])]
@@ -213,12 +209,13 @@ varDecomp.midpointModel <- function(model, data, formula, weight){
 
 
 #' @export
-varDecomp.ordProbitModel <- function(model, data, formula, weight ){
+varDecomp.ordProbitModel <- function(model){
         matrix_coef <- coefficients(model)
 
         list_X <- model.matrix(model)
         list_w <- map(.x = names(model), function(x) model[[x]]$weights)
 
+        formula   = model[[1]]$formula
         indep_vars <- all.vars(formula)
 
         k=1
@@ -269,11 +266,7 @@ varDecomp.ordProbitModel <- function(model, data, formula, weight ){
         }
 
 
-        list_vars <- NULL
-        for(indep_var in indep_vars){
-                list_vars[[indep_var]] <- unique(data[[indep_var]])
-        }
-
+        list_vars = model[[1]]$independentVariablesValues
         data_X <- do.call(expand.grid, list_vars)
         data_X <- data_X %>% mutate_all(as.character)
 

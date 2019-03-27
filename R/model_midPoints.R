@@ -47,6 +47,11 @@ model_midPoints <- function(formula,
                         dplyr::select(vars, case_number) %>%
                         filter(complete.cases(.))
 
+                independentVariablesValues <- NULL
+                for(indep_i in indep){
+                        independentVariablesValues[[indep_i]] <- unique(data_i[[indep_i]])
+                }
+
                 if(is.null(weight)){
                         data_ii$w = rep(1, length(y))
                 }else{
@@ -99,11 +104,13 @@ model_midPoints <- function(formula,
                      parameters    = parameters,
                      dependent_var = y,
                      model_matrix  = X,
+                     independentVariablesValues = independentVariablesValues,
                      residuals     = res,
                      weights       = w,
                      rmse          = sd_e,
                      r2            = r2,
-                     N             = N)
+                     N             = N,
+                     formula       = formula)
 
                 #bind_cols(tibble(ID = ID_i), as_tibble(beta))
 

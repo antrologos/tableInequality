@@ -1,5 +1,6 @@
 #' @export
 
+
 model_ordProbit <- function(formula_rhs,
                             data_pnad,
                             groups = NULL,
@@ -54,6 +55,11 @@ model_ordProbit <- function(formula_rhs,
                 data_i <- data_i %>%
                         mutate(log_min = log(min_faixa),
                                log_max = log(max_faixa))
+
+                independentVariablesValues <- NULL
+                for(indep_i in indep){
+                        independentVariablesValues[[indep_i]] <- unique(data_i[[indep_i]])
+                }
 
                 X = model.matrix(formula_rhs, data = data_i)
                 w = data_i$n
@@ -243,6 +249,7 @@ model_ordProbit <- function(formula_rhs,
                      parameters_beta         = parameters_beta,
                      parameters_lambda       = parameters_lambda,
                      model_matrix            = X,
+                     independentVariablesValues = independentVariablesValues,
                      weights                 = w,
                      `-2loglik`              = -2*loglikelihood,
                      `-2loglik_null`         = -2*loglikelihood_null,
@@ -257,7 +264,8 @@ model_ordProbit <- function(formula_rhs,
                      prop_correct_classified = sum(diag(classification_table))/sum(classification_table),
                      R_Spearman              = corr_Spearman,
                      R_Spearman2             = (corr_Spearman)^2,
-                     N                       = N)
+                     N                       = N,
+                     formula                 = formula_rhs)
         }
 
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){

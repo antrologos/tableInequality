@@ -203,7 +203,10 @@ varDecomp.midpointModel <- function(model){
         }
 
 
-        list(variance_decomp, list_counterfactuals)
+        result <- list(variance_decomp, list_counterfactuals)
+        class(result) <- "varDecompResults"
+
+        result
 }
 
 
@@ -401,8 +404,8 @@ varDecomp.ordProbitModel <- function(model){
         }
 
 
-        list(variance_decomp, list_counterfactuals)
+        result <- list(variance_decomp, list_counterfactuals)
+        class(result) <- "varDecompResults"
+
+        result
 }
-
-
-

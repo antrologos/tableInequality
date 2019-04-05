@@ -1,17 +1,11 @@
 #' @export
 
-#data_pnad = c1970_aggreg
-#groups = c("municipalityCurrent", "male", "educationAttainment_aggreg")
-
-#data_pnad = pnads_1968_1973 %>% filter(regiao != "DF")
-#groups = c("ano", "trimestre", "regiao", "sexo","educacao")
-
 get_midPoints <- function(data_pnad, groups = NULL){
 
         if(is.null(groups)){
                 data_pnad <- data_pnad %>%
                         mutate(ID = 1) %>%
-                        arrange_at(ID, min_faixa)
+                        arrange(ID, min_faixa)
         }else{
                 data_pnad <- data_pnad %>%
                         unite(col = ID, groups) %>%

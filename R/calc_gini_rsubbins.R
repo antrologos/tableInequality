@@ -19,17 +19,21 @@ calc_gini_rsubbins <- function(data_pnad, groups = NULL){
 
         data_split <- split(data_pnad, f = data_pnad$ID)
 
+        #data_i = data_split[[1]]
         gini_rsubbins = function(data_i){
                 limites  <- c(data_i$min_faixa[1],data_i$max_faixa)
                 contagem <- c(0, data_i$n)
-                fit <- rsubbins(bEdges = limites, bCounts = contagem)
+                fit <- suppressWarnings(rsubbins(bEdges = limites, bCounts = contagem))
                 tableInequality:::gini_numerical_integration(PDF_func = fit$rsubPDF,
                                            CDF_func = fit$rsubCDF,
                                            max_x    = fit$E)
         }
 
-        gini_result <- tableInequality:::future_map_parallel(.x = data_split, .f = ~gini_rsubbins(.x), .progress = T) %>%
-                tibble(ID = names(.),  gini = unlist(.))
+        ginis <- map(.x = data_split, .f = ~gini_rsubbins(.x)) %>%
+                unlist()
+
+        gini_result <- tibble(ID = names(data_split),
+                              gini = ginis)
 
         if(is.null(groups)){
                 gini_result <- gini_result %>%

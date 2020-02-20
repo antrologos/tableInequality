@@ -21,6 +21,25 @@ lorenz <- function(x, PDF_func, lowerbound = 0, upperbound) {
         lorenz_vector(x)
 }
 
+
+# Numeric calculation of the Generalized Lorenz Curve (UNUSED YET)
+generalized_lorenz <- function(x, quantile_func) {
+
+        # lorenz value for one observation
+        lorenz_i = function(y){
+                grid_lorenz = mvQuad::createNIGrid(dim=1, type="GLe", level=75)
+                mvQuad::rescale(grid_lorenz, domain = matrix(c(0, y), ncol=2))
+
+                mvQuad::quadrature(f = function(y){quantile_func(y)},
+                                   grid = grid_lorenz)
+        }
+
+        # lorenz value for a vector
+        lorenz_vector = Vectorize(lorenz_i)
+
+        lorenz_vector(x)
+}
+
 # function for numeric calculation of a inverse function
 # (the quantile function is the inverse of the CDF)
 inverse = function (f, lower = -100, upper = 100, extendInt = "no") {

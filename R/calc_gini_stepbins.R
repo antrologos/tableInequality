@@ -24,15 +24,18 @@ calc_gini_stepbins <- function(data_pnad, groups = NULL){
                 limites  <- c(data_i$min_faixa[1],data_i$max_faixa)
                 contagem <- c(0, data_i$n)
 
-                fit <- stepbins(bEdges = limites, bCounts = contagem)
+                fit <- suppressWarnings(stepbins(bEdges = limites, bCounts = contagem))
 
-                gini_numerical_integration(PDF_func = fit$stepPDF,
+                tableInequality:::gini_numerical_integration(PDF_func = fit$stepPDF,
                                            CDF_func = fit$stepCDF,
                                            max_x    = fit$E)
         }
 
-        gini_result <- future_map_parallel(.x = data_split, .f = ~gini_stepbins(.x), .progress = T) %>%
-                tibble(ID = names(.),  gini = unlist(.))
+        ginis <- map(.x = data_split, .f = ~gini_stepbins(.x)) %>%
+                unlist()
+
+        gini_result <- tibble(ID = names(data_split),
+                              gini = ginis)
 
         if(is.null(groups)){
                 gini_result <- gini_result %>%

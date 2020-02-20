@@ -26,8 +26,7 @@ calc_gini_MGBE <- function(data_pnad, groups = NULL){
                               bin_max = data_i$max_faixa,
                               obs_mean = NA,
                               ID_name = 'ID',
-                              modelsToFit = c("GB2", "GG", "BETA2",
-                                              "DAGUM", "SINGMAD",
+                              modelsToFit = c("GG", "SINGMAD",
                                               "LOGNO", "WEI", "GA",
                                               "LOGLOG", "PARETO2"))
 
@@ -42,10 +41,10 @@ calc_gini_MGBE <- function(data_pnad, groups = NULL){
 
         if(is.null(groups)){
                 gini_result <- gini_result %>%
-                        dplyr::select(gini)
+                        dplyr::select(gini, distribution)
         }else{
                 gini_result <- gini_result %>%
-                        dplyr::select(ID, gini) %>%
+                        dplyr::select(ID, gini, distribution) %>%
                         separate(col = ID, into = groups, sep = "_")
         }
 

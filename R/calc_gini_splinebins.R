@@ -24,15 +24,18 @@ calc_gini_splinebins <- function(data_pnad, groups = NULL){
                 limites  <- c(data_i$min_faixa[1],data_i$max_faixa)
                 contagem <- c(0, data_i$n)
 
-                fit <- splinebins(bEdges = limites, bCounts = contagem)
+                fit <- suppressWarnings(splinebins(bEdges = limites, bCounts = contagem))
 
-                gini_numerical_integration(PDF_func = fit$splinePDF,
-                                           CDF_func = fit$splineCDF,
-                                           max_x    = fit$E)
+                tableInequality:::gini_numerical_integration(PDF_func = fit$splinePDF,
+                                                             CDF_func = fit$splineCDF,
+                                                             max_x    = fit$E)
         }
 
-        gini_result <- future_map_parallel(.x = data_split, .f = ~gini_splinebins(.x), .progress = T) %>%
-                tibble(ID = names(.),  gini = unlist(.))
+        ginis <- map(.x = data_split, .f = ~gini_splinebins(.x)) %>%
+                unlist()
+
+        gini_result <- tibble(ID = names(data_split),
+                              gini = ginis)
 
         if(is.null(groups)){
                 gini_result <- gini_result %>%

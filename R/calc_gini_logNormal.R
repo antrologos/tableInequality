@@ -1,5 +1,6 @@
 #' @export
 
+
 calc_gini_logNormal <- function(data_pnad,
                                 groups = NULL){
 
@@ -20,7 +21,7 @@ calc_gini_logNormal <- function(data_pnad,
 
         data_split <- split(data_pnad, f = data_pnad$ID)
 
-        #data_i = data_split[[700]]
+        #data_i = data_split[[1]]
         gini_logNormal = function(data_i){
 
                 #for(i in 1:length(data_split)){
@@ -40,31 +41,44 @@ calc_gini_logNormal <- function(data_pnad,
                         mutate(log_min = log(min_faixa),
                                log_max = log(max_faixa))
 
-                likelihood <- function(logNormalParameters){
+                likelihood <- function(logNormalParameters, log_min, log_max, n){
 
                         mu     <- logNormalParameters[1]
                         sigma2 <- exp(logNormalParameters[2])
 
                         sigma <- sqrt(sigma2)
 
-                        with(data_i, {
-                                probs <- pnorm(log_max - mu, sd = sigma) - pnorm(log_min - mu, sd = sigma)
-                                probs[length(probs)] = 1 - pnorm(last(log_min) - mu, sd = sigma)
+                        probs <- pnorm(log_max - mu, sd = sigma) - pnorm(log_min - mu, sd = sigma)
+                        probs[length(probs)] = 1 - pnorm(last(log_min) - mu, sd = sigma)
 
-                                -sum(n*log(probs)) #negativo porque o nlm minimiza
-                        })
+                        sum(n*log(probs)) #negativo porque o nlm minimiza
                 }
 
-                parameters <- try( maxLik::maxLik(logLik = function(x) -likelihood(x),
-                                          start = c(1,1)),
+                neg_likelihood <- function(logNormalParameters, log_min, log_max, n){
+                        -likelihood(logNormalParameters, log_min, log_max, n)
+                }
+
+                parameters <- try( maxLik::maxLik(logLik = likelihood,
+                                                  start = c(1,1),
+                                                  log_min = data_i$log_min,
+                                                  log_max = data_i$log_max,
+                                                  n = data_i$n),
                                    silent = TRUE)
 
                 if("try-error" %in% class(parameters)){
-                        parameters <- nlm(f = likelihood, p = c(1,1))
+                        parameters <- nlm(f = neg_likelihood,
+                                          p = c(1,1),
+                                          log_min = data_i$log_min,
+                                          log_max = data_i$log_max,
+                                          n = data_i$n)
                 }else{
                         if(parameters$code == 3){
-                                parameters <- maxLik::maxLik(logLik = function(x) -likelihood(x),
-                                               start = c(1,1), method = "BFGS")
+                                parameters <- maxLik::maxLik(logLik = likelihood,
+                                                             start = c(1,1),
+                                                             log_min = data_i$log_min,
+                                                             log_max = data_i$log_max,
+                                                             n = data_i$n,
+                                                             method = "BFGS")
                         }
                 }
 
@@ -89,7 +103,7 @@ calc_gini_logNormal <- function(data_pnad,
                 plan(multiprocess)
         }
 
-        gini_result <- future_map_dfr(data_split, gini_logNormal, .progress = T)
+        gini_result <- map_dfr(data_split, gini_logNormal)
 
         gini_result <- tibble(ID   = rownames(t(gini_result)),
                               gini = t(gini_result)[,1])
@@ -104,5 +118,4 @@ calc_gini_logNormal <- function(data_pnad,
         }
 
         gini_result
-
 }

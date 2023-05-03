@@ -32,7 +32,7 @@ calc_quantile_rsubbins <- function(p, data_pnad, groups = NULL){
         }
 
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
-                plan(multiprocess)
+                plan(multisession)
         }
 
         quantile_result <- future_map_dfr(.x = data_split,

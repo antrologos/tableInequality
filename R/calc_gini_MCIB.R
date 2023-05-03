@@ -285,7 +285,7 @@ calc_gini_MCIB <- function(data_pnad, groups = NULL, known_groupMeans = NULL, to
         }
 
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
-                plan(multiprocess)
+                plan(multisession)
         }
 
         grid_mean = mvQuad::createNIGrid(dim = 1, type = "GLe", level = 10000)

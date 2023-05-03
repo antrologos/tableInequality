@@ -29,7 +29,7 @@ calc_mean_RPME <- function(data_pnad, groups = NULL){
                 names()
 
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
-                plan(multiprocess)
+                plan(multisession)
         }
 
         mean_result <- future_map_dfr(1:length(pnads_midpoints_byGroups), .f = function(i){

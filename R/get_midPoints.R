@@ -39,7 +39,7 @@ get_midPoints <- function(data_pnad, groups = NULL){
         }
 
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
-                plan(multiprocess)
+                plan(multisession)
         }
 
         data_alpha <- future_map_dfr(.x = data_split, .f = get_alpha, .progress = T)

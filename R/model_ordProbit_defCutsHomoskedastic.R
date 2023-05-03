@@ -139,7 +139,7 @@ model_ordProbit_defCutsHomoskedastic <- function(formula,
                 results
         }
 
-        plan(multiprocess)
+        plan(multisession)
 
         #parameters = list()
         #for(i in 1:length(data_split)){

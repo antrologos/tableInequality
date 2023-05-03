@@ -80,7 +80,7 @@ calc_decompTheil_stepbins <- function(data_pnad, groups_theil, groups = NULL){
         }
 
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
-                plan(multiprocess)
+                plan(multisession)
         }
 
         #calc_decompTheil(data_split[[1]])

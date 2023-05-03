@@ -269,7 +269,7 @@ model_ordProbit <- function(formula_rhs,
         }
 
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
-                plan(multiprocess)
+                plan(multisession)
         }
 
         #parameters = list()

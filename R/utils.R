@@ -85,8 +85,8 @@ gini_numerical_integration <- function(PDF_func,  CDF_func, max_x){
 
 future_map_parallel <- function(.x, .f, ..., .progress = FALSE, .options = future_options()){
 
-        if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
-                plan(multiprocess)
+        if(!any(c("multisession", "multicore", "multisession", "cluster") %in% class(plan()))){
+                plan(multisession)
         }
 
         future_map(.x, .f, ..., .progress = FALSE, .options = future_options())

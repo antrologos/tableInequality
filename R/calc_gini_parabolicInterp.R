@@ -232,7 +232,7 @@ calc_gini_parabolicInterp <- function(data_pnad,
         }
 
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
-                plan(multiprocess)
+                plan(multisession)
         }
 
         gini_result <- future_map_dfr(.x = data_split, .f = ~gini_parabolas(.x), .progress = T)

@@ -117,7 +117,7 @@ model_midPoints <- function(formula,
         }
 
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
-                plan(multiprocess)
+                plan(multisession)
         }
 
         #betas = NULL

@@ -64,7 +64,7 @@ calc_gini_gpinter <- function(data_pnad, groups = NULL, known_groupMeans = NULL)
         }
 
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
-                plan(multiprocess)
+                plan(multisession)
         }
 
         gini_result = future_map_dbl(.x = data_split,

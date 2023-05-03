@@ -42,7 +42,7 @@ calc_mean_rsubbins <- function(data_pnad, groups = NULL){
         }
 
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
-                plan(multiprocess)
+                plan(multisession)
         }
 
         mean_result <- future_map(.x = data_split, .f = mean_rsubbins) %>%

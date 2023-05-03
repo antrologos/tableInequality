@@ -194,7 +194,7 @@ calc_gini_paretoLocalThreasholds <- function(data_pnad, groups = NULL){
         }
 
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
-                plan(multiprocess)
+                plan(multisession)
         }
 
         grid_mean = mvQuad::createNIGrid(dim = 1, type = "GLe", level = 2000)

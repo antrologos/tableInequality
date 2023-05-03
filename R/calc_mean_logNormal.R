@@ -84,7 +84,7 @@ calc_mean_logNormal <- function(data_pnad,
         }
 
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
-                plan(multiprocess)
+                plan(multisession)
         }
 
         mean_result <- future_map_dfr(data_split, mean_logNormal, .progress = T)

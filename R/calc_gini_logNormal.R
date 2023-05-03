@@ -100,7 +100,7 @@ calc_gini_logNormal <- function(data_pnad,
         }
 
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
-                plan(multiprocess)
+                plan(multisession)
         }
 
         gini_result <- map_dfr(data_split, gini_logNormal)

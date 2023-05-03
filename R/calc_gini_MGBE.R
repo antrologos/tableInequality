@@ -34,7 +34,7 @@ calc_gini_MGBE <- function(data_pnad, groups = NULL){
         }
 
         if(!any(c("multiprocess", "multicore", "multisession", "cluster") %in% class(plan()))){
-                plan(multiprocess)
+                plan(multisession)
         }
 
         gini_result <- future_map_dfr(data_split, run_GB_family_i, .progress = T)

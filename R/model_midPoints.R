@@ -131,10 +131,10 @@ model_midPoints <- function(formula,
         #}
 
         betas_result <- future_map(.x = data_split,
-                                .f = regression,
-                                formula = formula,
-                                weight = weight,
-                                .progress = T)
+                                   .f = regression,
+                                   formula = formula,
+                                   weight = weight,
+                                   .progress = T)
 
         class(betas_result) <- "midpointModel"
 
@@ -238,7 +238,7 @@ summary.midpointModel <- function(midpointModel, digits = 3){
         results <- rbind(results, "",
                          format(rmse, digits = digits),
                          format(r2,   digits = digits),
-                         format(N,    digits = 0))
+                         round(N))
 
         rownames(results) <- c(rep("", 2*length(var_names)), "", "RMSE", "R2", "N")
         rownames(results)[uneven_lines] <- var_names
